@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset="UTF-8">
+	<title>Skingo - Functions Example</title>
+	<style>
+		/* global CSS of layout */
+		:root {
+			--primary-color: #0378cb;
+			--secondary-color: #d04545;
+		}
+
+		body {
+			font-family: Arial, sans-serif;
+			margin: 0;
+			padding: 0;
+		}
+
+		h1 {
+			color: var(--secondary-color);
+		}
+
+		main {
+			margin: 1rem;
+		}
+	</style>
+</head>
+
+<body>
+
+	<main>
+		{{ .Content }}
+	</main>
+
+	<script>
+		console.log('Loaded layout'); // global JavaScript of layout
+	</script>
+</body>
+
+</html>

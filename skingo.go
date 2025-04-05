@@ -2,11 +2,13 @@ package skingo
 
 import (
 	"crypto/md5"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"sync"
@@ -38,21 +40,70 @@ type TemplateSet struct {
 	masterTmpl    *template.Template
 	templateHTML  map[string]string
 	mu            sync.Mutex
-	usedTemplates map[string]bool // Track which templates have been used
+	usedTemplates map[string]bool  // Track which templates have been used
+	customFuncs   template.FuncMap // Stores custom functions
+}
+
+// defaultFuncs contém as funções padrão disponíveis em todos os templates
+var defaultFuncs = template.FuncMap{
+	"add": func(a, b int) int { return a + b },
+	"mod": func(a, b int) int { return a % b },
+	"mul": func(a, b int) int { return a * b },
+	"sub": func(a, b int) int { return a - b },
+	"toJson": func(v interface{}) string {
+		b, err := json.Marshal(v)
+		if err != nil {
+			return "{}"
+		}
+		return string(b)
+	},
+	"hasField": func(v interface{}, field string) bool {
+		val := reflect.ValueOf(v)
+		if val.Kind() == reflect.Ptr {
+			val = val.Elem()
+		}
+		if val.Kind() != reflect.Struct {
+			return false
+		}
+		f := val.FieldByName(field)
+		return f.IsValid() && !f.IsZero()
+	},
 }
 
 // NewTemplateSet creates a new template set using the specified template
 // as the layout. The layout must contain <head> and <body> tags
 // where the CSS and JS will be automatically injected.
 func NewTemplateSet(layoutName string) *TemplateSet {
-	return &TemplateSet{
+	ts := &TemplateSet{
 		templates:     make(map[string]*Template),
 		layout:        nil,
 		layoutName:    layoutName,
 		masterTmpl:    template.New("master"),
 		templateHTML:  make(map[string]string),
 		usedTemplates: make(map[string]bool),
+		customFuncs:   make(template.FuncMap),
 	}
+
+	// Apply default functions immediately
+	ts.masterTmpl.Funcs(defaultFuncs)
+
+	return ts
+}
+
+// AddFuncs adds custom functions to the template set.
+// These functions will be available in all templates.
+// Note: This method should be called before ParseDirs.
+func (ts *TemplateSet) AddFuncs(funcMap template.FuncMap) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	// Save the custom functions for later use
+	for name, fn := range funcMap {
+		ts.customFuncs[name] = fn
+	}
+
+	// Apply them to the master template
+	ts.masterTmpl.Funcs(funcMap)
 }
 
 // generateScopeClass build a scope class based on the template name and returns
@@ -188,7 +239,8 @@ func (ts *TemplateSet) parseLayoutFile(content string) error {
 //
 // After processing, the templates are available for rendering via
 // the Execute method, with their CSS styles and JS scripts automatically included
-// in the appropriate places in the layout. //
+// in the appropriate places in the layout.
+//
 // Returns an error if any directory cannot be read, if any template
 // cannot be parsed, or if the layout template is not found.
 func (ts *TemplateSet) ParseDirs(dirs ...string) error {
@@ -232,7 +284,7 @@ func (ts *TemplateSet) ParseDirs(dirs ...string) error {
 	var compMu sync.Mutex
 
 	// Globals functions for all templates
-	ts.masterTmpl.Funcs(template.FuncMap{
+	internalFuncs := template.FuncMap{
 		"_register_template": func(name string) string {
 			ts.mu.Lock()
 			defer ts.mu.Unlock()
@@ -314,6 +366,12 @@ func (ts *TemplateSet) ParseDirs(dirs ...string) error {
 			if len(args) == 1 {
 				if mapData, ok := args[0].(map[string]interface{}); ok {
 					data = mapData
+				} else {
+					// Caso simples: um único valor que não é um mapa
+					// Mapeamos para índice numérico
+					data = map[string]interface{}{
+						"0": args[0],
+					}
 				}
 			} else {
 				dataMap := make(map[string]interface{})
@@ -334,7 +392,10 @@ func (ts *TemplateSet) ParseDirs(dirs ...string) error {
 
 			return template.HTML(buf.String()), nil
 		},
-	})
+	}
+
+	// Add internal functions
+	ts.masterTmpl.Funcs(internalFuncs)
 
 	// Second pass: create the templates and allow references between them
 	for name, html := range ts.templateHTML {
@@ -354,7 +415,23 @@ func (ts *TemplateSet) ParseDirs(dirs ...string) error {
 		ts.templates[name].tmpl = ts.masterTmpl.Lookup(templateName)
 	}
 
-	layoutTmpl, err := template.New(ts.layoutName).Parse(ts.layout.HTML)
+	// Prepare the layout template with all functions
+	layoutFuncs := template.FuncMap{}
+
+	// Combine default functions
+	for name, fn := range defaultFuncs {
+		layoutFuncs[name] = fn
+	}
+
+	// Add custom functions
+	for name, fn := range ts.customFuncs {
+		layoutFuncs[name] = fn
+	}
+
+	layoutTmpl := template.New(ts.layoutName)
+	layoutTmpl.Funcs(layoutFuncs)
+
+	layoutTmpl, err := layoutTmpl.Parse(ts.layout.HTML)
 	if err != nil {
 		return err
 	}
@@ -480,10 +557,11 @@ func (ts *TemplateSet) ExecuteIsolated(w io.Writer, filename string, data interf
 
 	isolatedTmpl := template.New(name + "_isolated")
 
-	// Configura as funções padrões que possam ser necessárias
-	isolatedTmpl.Funcs(template.FuncMap{
-		// Funções básicas comuns podem ser adicionadas aqui
-	})
+	// Adicionar funções padrão
+	isolatedTmpl.Funcs(defaultFuncs)
+
+	// Adicionar funções customizadas
+	isolatedTmpl.Funcs(ts.customFuncs)
 
 	parsedTmpl, err := isolatedTmpl.Parse(htmlContent)
 	if err != nil {

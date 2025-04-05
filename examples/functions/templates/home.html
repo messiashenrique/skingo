@@ -1,0 +1,17 @@
+<template>
+  <div class="container">
+    <h1>{{uppercase .Title}}</h1>
+    <p>{{.Content}}</p>
+    <p>Preço: {{formatPrice .Price}}</p>
+    
+    <!-- Usando operações matemáticas -->
+    <p>3 + 5 = {{add 3 5}}</p>
+    <p>10 - 4 = {{sub 10 4}}</p>
+    
+    <!-- Usando JSON -->
+    <script>
+			const data = "{{ toJson .}}";
+			console.log(data);
+		</script>
+  </div>
+</template>
