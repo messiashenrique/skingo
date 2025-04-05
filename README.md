@@ -1,10 +1,10 @@
----
 <h1 align="center">
   <picture>
-    <img height="125" alt="Skingo" src="https://raw.githubusercontent.com/messiashenrique/skingo/refs/heads/main/docs/static/img/skingo-logo.svg">
+    <img height="72" alt="Skingo" src="docs/static/img/skingo-logo.svg">
   </picture>
 </h1>
----
+
+🌏 English | 🇧🇷 **[Português](README-pt-BR.md)**
 
 # skingo
 Simple Proposal for Using HTML Templates in Go
@@ -204,6 +204,30 @@ func (ts *TemplateSet) ExecuteIsolated(w io.Writer, filename string, data interf
 ```
 Renders a template in isolation, without using the layout. Useful for HTMX and Ajax requests.
 **Note:** `ExecuteIsolated` does not separate JS and CSS scopes. Therefore, it is recommended that styles be declared globally.
+
+## Roadmap for Development
+
+| Stage | Description | Priority | Status |
+|-------|-----------|------------|--------|
+| **Tests** | Implementation of comprehensive unit tests | High | 🔄 In progress |
+| **Performance Optimization** | Refactoring to improve rendering efficiency | High | 📅 Planned |
+| **Full Documentation** | Detailed documentation with examples for each feature | High | 🔄 In progress |
+| **HTMX Integration** | Improved support for HTMX with dedicated helpers | High | 📅 Planned |
+| **Advanced Examples** | Repository with more complex examples and real use cases | Medium | 📅 Planned |
+| **Smart Caching** | Caching system to improve rendering time | Medium | 📅 Planned |
+| **Hot Reload** | Support for hot reload during development | Medium | 🔮 Considering |
+| **Parameter Validation** | Parameter validation system for components | Medium | 📅 Planned |
+| **Benchmarks** | Performance comparison with other solutions | Medium | 📅 Planned |
+| **CSS/JS Minification** | Automatic minification of CSS and JS in production | Medium | 📅 Planned |
+| **Extensions for Tools** | Plugins for IDEs and integrations with development tools | Low | 🔮 Considering |
+| **Server Side Rendering** | Implementation of SSR optimized for SPAs | Low | 🔮 Considering |
+| **Integrated Design System** | Base components to facilitate the creation of consistent interfaces | Low | 🔮 Considering |
+| **Template Precompilation** | Tool to precompile templates and improve performance | Low | 🔮 Considering |
+
+### Caption
+- 🔄 **In progress**: Development has started
+- 📅 **Planned**: Planned for implementation soon
+- 🔮 **Considering**: Being considered for the future
 
 ## License
 MIT

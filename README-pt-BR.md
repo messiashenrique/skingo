@@ -1,10 +1,11 @@
----
+
 <h1 align="center">
   <picture>
-    <img height="125" alt="Skingo" src="https://raw.githubusercontent.com/messiashenrique/skingo/refs/heads/main/docs/static/img/skingo-logo.svg">
+    <img height="72" alt="Skingo" src="docs/static/img/skingo-logo.svg">
   </picture>
 </h1>
----
+
+🌏 **[English](README.md)** | 🇧🇷 Português
 
 # skingo
 Simples proposta para usar modelos HTML em Go
@@ -203,6 +204,30 @@ func (ts *TemplateSet) ExecuteIsolated(w io.Writer, filename string, data interf
 ```
 Renderiza um template de forma isolada, sem usar o layout. Útil para HTMX e requisições Ajax.
 **Nota:** `ExecuteIsolated` não faz separação de escopos JS e CSS. Portanto, o recomendado é que os estilos sejam declarados globalmente.
+
+## Roteiro de Desenvolvimento
+
+| Etapa | Descrição | Prioridade | Status |
+|-------|-----------|------------|--------|
+| **Testes** | Implementação de testes unitários abrangentes | Alta | 🔄 Em progresso |
+| **Otimização de Performance** | Refatoração para melhorar a eficiência de renderização | Alta | 📅 Planejado |
+| **Documentação Completa** | Documentação detalhada com exemplos para cada funcionalidade | Alta | 🔄 Em progresso |
+| **Integração HTMX** | Suporte aprimorado para HTMX com helpers dedicados | Alta | 📅 Planejado |
+| **Exemplos Avançados** | Repositório com exemplos mais complexos e casos de uso reais | Média | 📅 Planejado |
+| **Cache Inteligente** | Sistema de cache para melhorar o tempo de renderização | Média | 📅 Planejado |
+| **Hot Reload** | Suporte para hot reload durante o desenvolvimento | Média | 🔮 Considerando |
+| **Validação de Parâmetros** | Sistema de validação de parâmetros para componentes | Média | 📅 Planejado |
+| **Benchmarks** | Comparativo de performance com outras soluções | Média | 📅 Planejado |
+| **Minificação CSS/JS** | Minificação automática de CSS e JS em produção | Média | 📅 Planejado |
+| **Extensões para Ferramentas** | Plugins para IDEs e integrações com ferramentas de desenvolvimento | Baixa | 🔮 Considerando |
+| **Server Side Rendering** | Implementação de SSR otimizado para SPAs | Baixa | 🔮 Considerando |
+| **Design System Integrado** | Componentes base para facilitar a criação de interfaces consistentes | Baixa | 🔮 Considerando |
+| **Precompilação de Templates** | Ferramenta para precompilar templates e melhorar o desempenho | Baixa | 🔮 Considerando |
+
+### Legenda
+- 🔄 Em progresso: Desenvolvimento iniciado
+- 📅 Planejado: Planejado para implementação em breve
+- 🔮 Considerando: Sendo considerado para o futuro
 
 ## Licença
 MIT
