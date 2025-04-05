@@ -7,29 +7,29 @@
 ---
 
 # skingo
-Simple Proposal for Using HTML Templates in Go
+Simples proposta para usar modelos HTML em Go
 
-Skingo is a Go package that extends the standard `html/template` libray with component functionality, CSS scoping, JS auto-inclusion, and more.
+Skingo é um pacote Go que estende o pacote `html/template` padrão com funcionalidades de componentes, escopo de CSS, inclusão automática de JS e muito mais.
 
-Skingo was inspired by the simple and clean way of interfacing HTML, CSS, and JS that Vue.js pages and components use.
+Skingo foi inspirado na forma simples e clara de serapação entre HTML, CSS e JS adotada nas páginas e componentes do Vue.js.
 
-## Features
+## Características
 
-- 🧩 Reusable component system
-- 🎨 Automatic CSS scoping to avoid conflicts
-- 📦 Automatic CSS and JS grouping
-- 🔍 Smart dependency tracking
+- 🧩 Sistema de componentes reutilizáveis
+- 🎨 Escopo automático de CSS para evitar conflitos
+- 📦 Agrupamento automático de CSS e JS
+- 🔍 Rastreamento inteligente de dependências
 - 🚀 Template layouts
 
-## Installation
+## Instalação
 
 ```bash
 go get github.com/messiashenrique/skingo
 ```
 
-## How to use
+## Como usar
 
-### Basic example
+### Exemplo básico
 ```go
 //main.go
 package main
@@ -41,35 +41,35 @@ import (
 )
 
 func main() {
-    // Makes a new template set with "layout" as the layout template
+    // Cria um novo conjunto de templates com "layout" como template de layout
     ts := skingo.NewTemplateSet("layout")
     
-    // Analyze the templates in the "templates" directory
+    // Analisa os templates no diretório "templates"
     if err := ts.ParseDirs("templates"); err != nil {
-        log.Fatalf("Error parsing templates: %v", err)
+        log.Fatalf("Erro ao analisar templates: %v", err)
     }
     
-    // Handler to home page
+    // Handler para a página inicial
     http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
         if err := ts.Execute(w, "home", map[string]interface{}{
-            "Title": "Home Page",
-            "Content": "Welcome to Skingo!",
+            "Title": "Página Inicial",
+            "Content": "Bem-vindo ao Skingo!",
         }); err != nil {
             http.Error(w, err.Error(), http.StatusInternalServerError)
         }
     })
     
-    log.Println("Server running on http://localhost:8080")
+    log.Println("Servidor rodando em http://localhost:8080")
     log.Fatal(http.ListenAndServe(":8080", nil))
 }
 ```
 
-## Components
+## Componentes
 
-Skingo lets you create reusable components that encapsulate HTML, CSS, and JavaScript.
+Skingo permite criar componentes reutilizáveis que encapsulam HTML, CSS e JavaScript.
 
-### Defining a component
-Component with positional parameters and optional 2nd parameter
+### Definindo um componente
+Componente com parâmtros posicionais e 2º parâmetro opcional
 ```html
 <!-- templates/button.html -->
 <template>
@@ -96,10 +96,10 @@ Component with positional parameters and optional 2nd parameter
 </style>
 
 <script>
-  console.log("Loaded button!");
+  console.log("Botão carregado!");
 </script>
 ```
-Component with named parameters
+Componente com parâmetros nomeados
 ```html
 <!-- templates/card.html -->
 <template>
@@ -149,31 +149,30 @@ Component with named parameters
 </style>
 ```
 
-### Using a component
+### Usando um componente
+Usando os componetes na Página principal e também componentes aninhados.
 ```html
-Using the components on the Home Page and also nested components.
 <!-- templates/home.html -->
 <template>
   <div class="container">
     <h1>{{.Title}}</h1>
     <p>{{.Content}}</p>
+    
+    <!-- Usando componentes com parâmetros nomeados -->
+    {{ comp "card.html" (dict 
+      "title" "Exemplo de Card" 
+      "content" "Este é um exemplo de um componente de card com um botão." 
+      "buttonText" "Ler mais"
+    ) }}
+    
+    {{ comp "card.html" (dict 
+      "title" "Outro Card" 
+      "content" "Os componentes podem ser facilmente reutilizados com diferentes conteúdos." 
+      "buttonText" "Saiba mais"
+    ) }}
 
-    <!-- Using components with named parameters -->
-    {{ comp "card.html" (dict 
-      "title" "Card Example" 
-      "content" "This is an example of a card component with a button." 
-      "buttonText" "Read more"
-    ) }}
-    
-    {{ comp "card.html" (dict 
-      "title" "Other Card" 
-      "content" "Components can be easily reused with different content." 
-      "buttonText" "Find out more"
-    ) }}
-    
-    <!-- Using component with positional parameters and optional 2nd parameter -->
-    {{ comp "button.html" "Click me!" "green" }}
-    
+    <!-- Usando componente com parâmetros posicionais e 2º parâmtro opicional -->
+    {{ comp "button.html" "Clique-me!" "green" }}
   </div>
 </template>
 ```
@@ -184,28 +183,28 @@ Using the components on the Home Page and also nested components.
 ```go
 func NewTemplateSet(layoutName string) *TemplateSet
 ```
-Makes a new template set using the specified template as the layout.
+Cria um novo conjunto de templates usando o template especificado como layout.
 
 ### ParseDirs
 ```go
 func (ts *TemplateSet) ParseDirs(dirs ...string) error
 ```
-Parses all HTML/templates files in the specified directories.
+Analisa todos os arquivos HTML/templates nos diretórios especificados.
 
 ### Execute
 ```go
 func (ts *TemplateSet) Execute(w io.Writer, name string, data interface{}) error
 ```
-Renders the specified template using the configured layout.
+Renderiza o template especificado usando o layout configurado.
 
 ### ExecuteIsolated
 ```go
 func (ts *TemplateSet) ExecuteIsolated(w io.Writer, filename string, data interface{}) error
 ```
-Renders a template in isolation, without using the layout. Useful for HTMX and Ajax requests.
-**Note:** `ExecuteIsolated` does not separate JS and CSS scopes. Therefore, it is recommended that styles be declared globally.
+Renderiza um template de forma isolada, sem usar o layout. Útil para HTMX e requisições Ajax.
+**Nota:** `ExecuteIsolated` não faz separação de escopos JS e CSS. Portanto, o recomendado é que os estilos sejam declarados globalmente.
 
-## License
+## Licença
 MIT
 
 

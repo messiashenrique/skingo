@@ -1,0 +1,30 @@
+<template>
+	<h1>{{ .Title }}</h1>
+	<p>This is the about page.</p>
+	<button id="myButton">Click me</button>
+	<a href="/">Back to Home</a>
+</template>
+
+<script>
+	document.getElementById('myButton').addEventListener('click', function () {
+		alert('Clicked Button!');
+	});
+</script>
+
+<style>
+	button {
+		background-color: #ddd;
+		padding: 0.5rem 1rem;
+		border: none;
+		border-radius: 0.25rem;
+		font-size: 1rem;
+	}
+
+	a {
+		background-color: var(--secondary-color);
+		padding: 0.5rem 1rem;
+		border-radius: 0.25rem;
+		text-decoration: none;
+		color: #fff;
+	}
+</style>
