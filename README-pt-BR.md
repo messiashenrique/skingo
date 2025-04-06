@@ -65,6 +65,33 @@ func main() {
 }
 ```
 
+## Layout 
+
+O Skingo permite a utilização flexível de layout. Assim, o único ponto obrigatório é definir a variável `{{ .Yield }}` como ponto de entrada para a renderização dos templates que utilizarem esse layout.
+
+Os código CSS e JavaScript declarados no layout terão escopo global.
+
+Um exemplo de layout pode ser visto a seguir:
+
+### Definindo um Layout 
+```html
+<!-- templates/layout.html -->
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8">
+	<title>Skingo</title>
+</head>
+<body>
+	{{ .Yield }}
+</body>
+</html>
+```
+Para definir o arquivo acima como layout, basta inserir o nome do arquivo na chamada de criação do conjunto de templates, fazendo `ts := skingo.NewTemplateSet("layout")`. 
+
+Não de esqueça de incluir na função `ParseDirs` o diretório onde está localizado o arquivo do layout.
+
+
 ## Componentes
 
 Skingo permite criar componentes reutilizáveis que encapsulam HTML, CSS e JavaScript.
@@ -203,7 +230,7 @@ Renderiza o template especificado usando o layout configurado.
 func (ts *TemplateSet) ExecuteIsolated(w io.Writer, filename string, data interface{}) error
 ```
 Renderiza um template de forma isolada, sem usar o layout. Útil para HTMX e requisições Ajax.
-**Nota:** `ExecuteIsolated` não faz separação de escopos JS e CSS. Portanto, o recomendado é que os estilos sejam declarados globalmente.
+* **Nota:** `ExecuteIsolated` não faz separação de escopo CSS. Portanto, o recomendado é que os estilos sejam declarados globalmente.
 
 ## Funções de Template
 
@@ -219,10 +246,11 @@ O Skingo inclui as seguintes funções padrão disponíveis em todos os template
 | `sub` | Subtrai dois números | `{{sub 10 4}}` → `6` |
 | `mul` | Multiplica dois números | `{{mul 3 5}}` → `15` |
 | `mod` | Retorna o resto da divisão | `{{mod 10 3}}` → `1` |
-| `toJson` | Converte um valor para JSON | `{{toJson .user}}` → `{"name":"João"}` |
-| `dict` | Cria um mapa de chave/valor | `{{comp "button.html" (dict "text" "Clique")}}` |
+| `comp` | Invoca um componente passando parâmetros | `{{comp "card" "Black Card"}}` |
+| `dict` | Cria um mapa de chave/valor | `{{comp "button" (dict "text" "Clique")}}` |
 | `param` | Acessa um parâmetro posicional | `{{param 0}}` |
 | `paramOr` | Acessa um parâmetro posicional com valor padrão | `{{paramOr 1 "Padrão"}}` |
+| `toJson` | Converte um valor para JSON | `{{toJson .user}}` → `{"name":"João"}` |
 
 ### Adicionando Funções Customizadas
 
@@ -239,7 +267,7 @@ ts.AddFuncs(template.FuncMap{
     },
 })
 ```
-
+* **Nota**: Este método deve ser chamado antes de `ParseDirs`.
 
 ## Roteiro de Desenvolvimento
 

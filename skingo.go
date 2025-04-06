@@ -32,7 +32,7 @@ type Layout struct {
 	tmpl *template.Template
 }
 
-// TemplateSet é um conjunto de templates
+// TemplateSet represents a set of templates
 type TemplateSet struct {
 	templates     map[string]*Template
 	layout        *Layout
@@ -73,6 +73,8 @@ var defaultFuncs = template.FuncMap{
 // NewTemplateSet creates a new template set using the specified template
 // as the layout. The layout must contain <head> and <body> tags
 // where the CSS and JS will be automatically injected.
+// In addition, it is mandatory to inform the entry point of the templates that will be
+// rendered in the layout, defining the '{{ .Yield }}' variable.
 func NewTemplateSet(layoutName string) *TemplateSet {
 	ts := &TemplateSet{
 		templates:     make(map[string]*Template),
@@ -114,8 +116,8 @@ func generateScopeClass(name string) string {
 	return fmt.Sprintf("s-%x", hash)[:8]
 }
 
-// ParseFile analyze a file and extract HTML, CSS and JS
-func (ts *TemplateSet) ParseFile(filename string) error {
+// parseFile analyze a file and extract HTML, CSS and JS
+func (ts *TemplateSet) parseFile(filename string) error {
 	content, err := os.ReadFile(filename)
 	if err != nil {
 		return err
@@ -227,22 +229,24 @@ func (ts *TemplateSet) parseLayoutFile(content string) error {
 }
 
 // ParseDirs parses all HTML/template files in the given directories.
-// The method processes files with the .html or .tmpl extension, extracting components
-// that contain <template>, <style>, and <script> tags.
+// The method processes files with the .html or .tmpl extension, extracting
+// components that contain <template>, <style>, and <script> tags.
 //
 // For each file, the content inside the <template> tag is extracted as HTML.
-// The content inside the <style> tag is extracted as CSS and automatically scoped using unique classes to avoid conflicts.
+// The content inside the <style> tag is extracted as CSS and automatically
+// scoped using unique classes to avoid conflicts.
 // The content inside the <script> tag is extracted as JavaScript.
 //
-// The method requires that a layout template (defined when creating the TemplateSet)
-// be found in at least one of the given directories.
+// The method requires that a layout template (defined when creating the
+// TemplateSet) be found in at least one of the given directories.
 //
 // After processing, the templates are available for rendering via
-// the Execute method, with their CSS styles and JS scripts automatically included
-// in the appropriate places in the layout.
+// the Execute method, with their CSS styles and JS scripts automatically
+// included in the appropriate places in the layout.
 //
 // Returns an error if any directory cannot be read, if any template
 // cannot be parsed, or if the layout template is not found.
+// ParseDirs parses all HTML/template files in the given directories.
 func (ts *TemplateSet) ParseDirs(dirs ...string) error {
 	layoutFound := false
 
@@ -262,7 +266,7 @@ func (ts *TemplateSet) ParseDirs(dirs ...string) error {
 				if name == ts.layoutName {
 					layoutFound = true
 				}
-				if err := ts.ParseFile(filepath.Join(dir, file.Name())); err != nil {
+				if err := ts.parseFile(filepath.Join(dir, file.Name())); err != nil {
 					return fmt.Errorf("error parsing file %s: %w", file.Name(), err)
 				}
 			}
@@ -426,6 +430,14 @@ func (ts *TemplateSet) ParseDirs(dirs ...string) error {
 		layoutFuncs[name] = fn
 	}
 
+	// Add internal functions to layout - especialmente 'comp'
+	for name, fn := range internalFuncs {
+		// Adicionar apenas funções úteis para o layout
+		if name == "comp" || name == "dict" || name == "param" || name == "paramOr" {
+			layoutFuncs[name] = fn
+		}
+	}
+
 	layoutTmpl := template.New(ts.layoutName)
 	layoutTmpl.Funcs(layoutFuncs)
 
@@ -438,22 +450,23 @@ func (ts *TemplateSet) ParseDirs(dirs ...string) error {
 	return nil
 }
 
-// ParseDir invokes ParseDirs, but with a unique directory. See more in ParseDirs
+// ParseDir invokes ParseDirs, but with a unique directory.
 func (ts *TemplateSet) ParseDir(dir string) error {
 	return ts.ParseDirs(dir)
 }
 
 // Execute renders a specific template using the configured layout.
-// The method combines the HTML content of the requested template with the layout,
-// automatically injecting all CSS and JavaScript associated with the templates
-// used (including referenced components) into the appropriate places in the layout.
+// The method combines the HTML content of the requested template with the
+// layout, automatically injecting all CSS and JavaScript associated with the
+// templates used (including referenced components) into the appropriate places
+// in the layout.
 //
 // The 'name' parameter must match the name of a previously parsed template
 // (without extension).
 //
 // The 'data' parameter contains the data that will be passed to the template.
-// It can be any type supported by the html/template package, such as map, struct,
-// or nil if no data is required.
+// It can be any type supported by the html/template package, such as map,
+// struct, or nil if no data is required.
 //
 // During rendering, the system automatically tracks which templates
 // are used (including components referenced via the comp function) and includes
@@ -476,6 +489,21 @@ func (ts *TemplateSet) Execute(w io.Writer, name string, data interface{}) error
 	// Clean the usedTemplates list.
 	ts.mu.Lock()
 	ts.usedTemplates = make(map[string]bool)
+	ts.mu.Unlock()
+
+	// Pre-parse the layout to find all component calls
+	layoutContent := ts.layout.HTML
+	compRegex := regexp.MustCompile(`{{[^}]*comp\s+"?([^"\s}]+)"?`)
+	matches := compRegex.FindAllStringSubmatch(layoutContent, -1)
+
+	ts.mu.Lock()
+	for _, match := range matches {
+		if len(match) > 1 {
+			compName := match[1]
+			compName = strings.TrimSuffix(compName, ".html")
+			ts.usedTemplates[compName] = true
+		}
+	}
 	ts.mu.Unlock()
 
 	// Creates a buffer to capture the template output
@@ -507,10 +535,10 @@ func (ts *TemplateSet) Execute(w io.Writer, name string, data interface{}) error
 
 	// Prepare the data for layout
 	layoutData := map[string]interface{}{
-		"Content": template.HTML(contentBuf.String()),
-		"CSS":     template.CSS(allCSS.String()),
-		"JS":      template.JS(allJS.String()),
-		"Data":    data,
+		"Yield": template.HTML(contentBuf.String()),
+		"CSS":   template.CSS(allCSS.String()),
+		"JS":    template.JS(allJS.String()),
+		"Data":  data,
 	}
 
 	// Execute the layout template with the prepared data

@@ -23,4 +23,10 @@
 
 <script>
 	console.log("Loaded button!");
+	btn = document.querySelector(".green");
+	if (btn) {
+		btn.addEventListener("click", function () {
+			alert("Green Button clicked!");
+		});
+	}
 </script>

@@ -29,8 +29,10 @@
 
 <body>
 
+	{{ comp "navbar" (dict "title" "Skingo - Components Example")}}
+
 	<main>
-		{{ .Content }}
+		{{ .Yield }}
 	</main>
 
 	<script>
