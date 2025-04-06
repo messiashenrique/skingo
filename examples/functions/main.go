@@ -30,7 +30,7 @@ func main() {
 	// Handler for Home Page
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		data := map[string]interface{}{
-			"Title":   "Home Page - Skingo",
+			"Title":   "Skingo - Functions Example",
 			"Content": "Welcome to Skingo!",
 			"Price":   159.90,
 		}

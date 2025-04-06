@@ -44,7 +44,7 @@ type TemplateSet struct {
 	customFuncs   template.FuncMap // Stores custom functions
 }
 
-// defaultFuncs contém as funções padrão disponíveis em todos os templates
+// defaultFuncs contains the default functions available in all templates
 var defaultFuncs = template.FuncMap{
 	"add": func(a, b int) int { return a + b },
 	"mod": func(a, b int) int { return a % b },
@@ -367,8 +367,6 @@ func (ts *TemplateSet) ParseDirs(dirs ...string) error {
 				if mapData, ok := args[0].(map[string]interface{}); ok {
 					data = mapData
 				} else {
-					// Caso simples: um único valor que não é um mapa
-					// Mapeamos para índice numérico
 					data = map[string]interface{}{
 						"0": args[0],
 					}
@@ -557,10 +555,10 @@ func (ts *TemplateSet) ExecuteIsolated(w io.Writer, filename string, data interf
 
 	isolatedTmpl := template.New(name + "_isolated")
 
-	// Adicionar funções padrão
+	// Add default functions
 	isolatedTmpl.Funcs(defaultFuncs)
 
-	// Adicionar funções customizadas
+	// Add custom functions
 	isolatedTmpl.Funcs(ts.customFuncs)
 
 	parsedTmpl, err := isolatedTmpl.Parse(htmlContent)

@@ -205,6 +205,41 @@ func (ts *TemplateSet) ExecuteIsolated(w io.Writer, filename string, data interf
 Renders a template in isolation, without using the layout. Useful for HTMX and Ajax requests.
 **Note:** `ExecuteIsolated` does not separate JS and CSS scopes. Therefore, it is recommended that styles be declared globally.
 
+## Template Functions
+
+Skingo offers several auxiliary functions for use in templates.
+
+### Default Functions
+
+Skingo includes the following standard functions available in all templates:
+
+| Function | Description | Example |
+|--------|-----------|---------|
+| `add` | Adds two numbers | `{{add 3 5}}` → `8` |
+| `sub` | Subtracts two numbers | `{{sub 10 4}}` → `6` |
+| `mul` | Multiplies two numbers | `{{mul 3 5}}` → `15` |
+| `mod` | Returns the remainder of the division | `{{mod 10 3}}` → `1` |
+| `toJson` | Converts a value to JSON | `{{toJson .user}}` → `{"name":"John"}` |
+| `dict` | Creates a key/value map | `{{comp "button.html" (dict "text" "Click")}}` |
+| `param` | Accesses a positional parameter | `{{param 0}}` |
+| `paramOr` | Accesses a positional parameter with default value | `{{paramOr 1 "Default"}}` |
+
+### Adding Custom Functions
+
+You can add your own functions for use in templates:
+
+```go
+ts := skingo.NewTemplateSet("layout")
+
+ts.AddFuncs(template.FuncMap{
+    "uppercase": strings.ToUpper,
+    "lowercase": strings.ToLower,
+    "formatDate": func(date time.Time) string {
+        return date.Format("02/01/2006")
+    },
+})
+```
+
 ## Roadmap for Development
 
 | Stage | Description | Priority | Status |
