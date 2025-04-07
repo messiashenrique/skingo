@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"strings"
 	"sync"
@@ -46,6 +45,24 @@ type TemplateSet struct {
 	cacheMu       sync.RWMutex                  // Specific mutex for cache
 }
 
+const (
+	uniqueOpenToken      = "___GO_TEMPLATE_OPEN___"
+	uniqueCloseToken     = "___GO_TEMPLATE_CLOSE___"
+	ElementTypeNormal    = 0 // Normal element
+	ElementTypeSingle    = 1 // Single element
+	ElementTypeContainer = 2 // Root Container
+)
+
+var (
+	htmlRegex     = regexp.MustCompile(`(?s)<template([^>]*)>(.*?)</template>`)
+	cssRegex      = regexp.MustCompile(`(?s)<style([^>]*)>(.*?)</style>`)
+	jsRegex       = regexp.MustCompile(`(?s)<script>(.*?)</script>`)
+	classRegex    = regexp.MustCompile(`class\s*=\s*["']([^"']*)["']`)
+	openTagRegex  = regexp.MustCompile(`^\s*<[^>]+>`)
+	unwrapRegex   = regexp.MustCompile(`unwrap`)
+	firstTagRegex = regexp.MustCompile(`^\s*<([a-zA-Z][a-zA-Z0-9]*)([^>]*)>`)
+)
+
 // defaultFuncs contains the default functions available in all templates
 var defaultFuncs = template.FuncMap{
 	"add": func(a, b int) int { return a + b },
@@ -59,26 +76,7 @@ var defaultFuncs = template.FuncMap{
 		}
 		return string(b)
 	},
-	"hasField": func(v interface{}, field string) bool {
-		val := reflect.ValueOf(v)
-		if val.Kind() == reflect.Ptr {
-			val = val.Elem()
-		}
-		if val.Kind() != reflect.Struct {
-			return false
-		}
-		f := val.FieldByName(field)
-		return f.IsValid() && !f.IsZero()
-	},
 }
-
-var (
-	htmlRegex     = regexp.MustCompile(`(?s)<template([^>]*)>(.*?)</template>`)
-	cssRegex      = regexp.MustCompile(`(?s)<style([^>]*)>(.*?)</style>`)
-	jsRegex       = regexp.MustCompile(`(?s)<script>(.*?)</script>`)
-	unwrapRegex   = regexp.MustCompile(`unwrap`)
-	firstTagRegex = regexp.MustCompile(`^\s*<([a-zA-Z][a-zA-Z0-9]*)([^>]*)>`)
-)
 
 // NewTemplateSet creates a new template set using the specified template
 // as the layout. The layout must contain <head> and <body> tags
@@ -129,6 +127,7 @@ func generateScopeClass(name string) string {
 
 // parseFile analyze a file and extract HTML, CSS and JS
 func (ts *TemplateSet) parseFile(filename string) error {
+
 	content, err := os.ReadFile(filename)
 	if err != nil {
 		return err
@@ -158,46 +157,52 @@ func (ts *TemplateSet) parseFile(filename string) error {
 
 		t.HTML = trimmedContent
 
-		// First, replace, temporaryly, the delimiters {{ }} to not interfere with the analysis
-		// Use a string id than difficultily to appear in the code
-		uniqueOpenToken := "___GO_TEMPLATE_OPEN___"
-		uniqueCloseToken := "___GO_TEMPLATE_CLOSE___"
+		// First, temporarily replace the {{ }} delimiters so as not to interfere with parsing
 		safeContent := strings.ReplaceAll(trimmedContent, "{{", uniqueOpenToken)
 		safeContent = strings.ReplaceAll(safeContent, "}}", uniqueCloseToken)
 
-		// Verify if starts with a tag and to find how is
+		// Verify if it starts with an opening tag and find which it is
 		hasRootElement := false
-		isSingleElement := false // Flag for unique element, without children
-		rootTagName := ""        // Name of the root tag (for use in CSS)
+		isSingleElement := false
+		isRootContainer := false // Flag for identifying a root container
+		rootTagName := ""
+		rootClasses := []string{} // Store the classes of the root element
 
-		// Regex to find the first opening tag
+		// Regex for finding the first opening tag
 		if firstTagMatch := firstTagRegex.FindStringSubmatch(safeContent); len(firstTagMatch) > 2 {
 			tagName := firstTagMatch[1]
 			rootTagName = tagName
 
-			// Check if it ends with the corresponding closing tag
+			// Extract classes from root element
+			rootAttributes := firstTagMatch[2]
+			if classMatches := classRegex.FindStringSubmatch(rootAttributes); len(classMatches) > 1 {
+				classStr := classMatches[1]
+				// Split classes by space and append
+				rootClasses = append(rootClasses, strings.Fields(classStr)...)
+			}
+
+			// Verify if it ends with the corresponding closing tag
 			closeTagPattern := fmt.Sprintf(`</\s*%s\s*>\s*$`, regexp.QuoteMeta(tagName))
 			closeTagRegex := regexp.MustCompile(closeTagPattern)
 
 			if closeTagRegex.MatchString(safeContent) {
 				hasRootElement = true
 
-				// Check if it is a unique element (no other elements between the tags)
-				// Remove the first tag and the last tag
+				// Verify if it's a single element (without other elements between the tags)
 				innerContent := safeContent
-				openTagRegex := regexp.MustCompile(`^\s*<[^>]+>`)
 				innerContent = openTagRegex.ReplaceAllString(innerContent, "")
 				closeTagRegex := regexp.MustCompile(`</\s*[^>]+>\s*$`)
 				innerContent = closeTagRegex.ReplaceAllString(innerContent, "")
 
-				// If the inner content does not contain other HTML tags, it is a single element
 				if !strings.Contains(innerContent, "<") {
 					isSingleElement = true
+				} else {
+					isRootContainer = true
 				}
 			}
 		}
 
-		// Extrair o CSS
+		// Extract the CSS
 		var css string
 		if cssMatches := cssRegex.FindStringSubmatch(string(content)); len(cssMatches) > 2 {
 			css = cssMatches[2]
@@ -207,22 +212,15 @@ func (ts *TemplateSet) parseFile(filename string) error {
 		if css == "" {
 		} else if unwrap || hasRootElement {
 			if hasRootElement {
-				// Check if there is already a class, adding our class in several possible situations
+				// Verify if there is a class attribute, adding our class in various possible situations
 				if strings.Contains(t.HTML, "class=\"") {
-					// class="something"
 					t.HTML = strings.Replace(t.HTML, "class=\"", fmt.Sprintf("class=\"%s ", t.scopeClass), 1)
 				} else if strings.Contains(t.HTML, "class='") {
-					// class='something'
 					t.HTML = strings.Replace(t.HTML, "class='", fmt.Sprintf("class='%s ", t.scopeClass), 1)
 				} else if strings.Contains(t.HTML, "class={{") {
-					// class={{ }}
 					t.HTML = strings.Replace(t.HTML, "class={{", fmt.Sprintf("class=\"%s {{", t.scopeClass), 1)
 				} else {
-					// There is no class attribute, we need to add it before the >
-					// Since we are working with the original HTML, we need to be careful
-					// not to interfere with the template delimiters
-
-					// Find the insertion point (before the > of the first element)
+					// Without class attribute, we need to add before the >
 					lastPos := -1
 					depth := 0
 					for i, char := range t.HTML {
@@ -237,27 +235,28 @@ func (ts *TemplateSet) parseFile(filename string) error {
 					}
 
 					if lastPos != -1 {
-						// Inserir o atributo class antes do >
 						t.HTML = t.HTML[:lastPos] + fmt.Sprintf(" class=\"%s\"", t.scopeClass) + t.HTML[lastPos:]
 					}
 				}
 
 				// Process CSS according to element type
+				var elementType int
 				if isSingleElement || unwrap {
-					// It is a single element or has explicit unwrap
-					// We use direct scope (element.class)
-					t.CSS = singleElementScopedCSS(css, t.scopeClass, rootTagName)
+					elementType = ElementTypeSingle
+				} else if isRootContainer {
+					elementType = ElementTypeContainer
 				} else {
-					// Element with children, we use contained scope (.element class)
-					t.CSS = containedScopedCSS(css, t.scopeClass)
+					elementType = ElementTypeNormal
 				}
+
+				t.CSS = scopedCSS(css, t.scopeClass, rootTagName, rootClasses, elementType)
 			} else {
-				// No root element, but with unwrap, we use a custom selector instead of class
+				// Whithout root element, but with unwrap, we use a custom selector instead of class
 				t.HTML = fmt.Sprintf(`<div class="%s" style="display:contents">%s</div>`, t.scopeClass, t.HTML)
 				t.CSS = containedScopedCSS(css, t.scopeClass)
 			}
 		} else {
-			// Caso padrão: wrap com div
+			// Default case: wrap with div
 			t.HTML = fmt.Sprintf(`<div class="%s">%s</div>`, t.scopeClass, t.HTML)
 			t.CSS = containedScopedCSS(css, t.scopeClass)
 		}
@@ -273,6 +272,92 @@ func (ts *TemplateSet) parseFile(filename string) error {
 	ts.templateHTML[t.Name] = t.HTML
 
 	return nil
+}
+
+// scopedCSS creates CSS scope for elements inside a container
+// (for example, when elements are inside a div with the scope class)
+func scopedCSS(css string, scopeClass string, rootElementTag string, rootClasses []string, elementType int) string {
+	cssBlocks := strings.Split(css, "}")
+	var scopedCSS strings.Builder
+
+	for _, block := range cssBlocks {
+		if strings.TrimSpace(block) == "" {
+			continue
+		}
+
+		parts := strings.SplitN(block, "{", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		selectors := parts[0]
+		declarations := parts[1]
+
+		// Split multiple selectors (separated by commas)
+		selectorList := strings.Split(selectors, ",")
+		var scopedSelectors []string
+
+		for _, selector := range selectorList {
+			selector = strings.TrimSpace(selector)
+			if selector == "" {
+				continue
+			}
+
+			if selector == rootElementTag {
+				// Is it the root element, add the class directly
+				scopedSelectors = append(scopedSelectors, fmt.Sprintf("%s.%s", selector, scopeClass))
+			} else if strings.HasPrefix(selector, ".") {
+				// Extract the class name without the dot
+				className := selector[1:]
+
+				// Verify if it's a single element or the class is in the root element
+				useDirectScope := false
+
+				if elementType == ElementTypeSingle {
+					// For single elements, all classes are treated without space
+					useDirectScope = true
+				} else {
+					// For other types, check if the class is in the root element
+					for _, rootClass := range rootClasses {
+						if rootClass == className {
+							useDirectScope = true
+							break
+						}
+					}
+				}
+
+				if useDirectScope {
+					// Without espace: ".class" -> ".s-xxxxx.class"
+					scopedSelectors = append(scopedSelectors, fmt.Sprintf(".%s%s", scopeClass, selector))
+				} else {
+					// With espace: ".class" -> ".s-xxxxx .class"
+					scopedSelectors = append(scopedSelectors, fmt.Sprintf(".%s %s", scopeClass, selector))
+				}
+			} else if strings.HasPrefix(selector, ":") {
+				// Is a pseudo-class
+				if rootElementTag != "" {
+					scopedSelectors = append(scopedSelectors, fmt.Sprintf("%s.%s%s", rootElementTag, scopeClass, selector))
+				} else {
+					scopedSelectors = append(scopedSelectors, fmt.Sprintf(".%s%s", scopeClass, selector))
+				}
+			} else if strings.Contains(selector, " ") || strings.Contains(selector, ">") ||
+				strings.Contains(selector, "+") || strings.Contains(selector, "~") {
+				// Is a selector with children or siblings
+				scopedSelectors = append(scopedSelectors, fmt.Sprintf(".%s %s", scopeClass, selector))
+			} else {
+				// Is other element
+				scopedSelectors = append(scopedSelectors, fmt.Sprintf(".%s %s", scopeClass, selector))
+			}
+		}
+
+		scopedSelector := strings.Join(scopedSelectors, ", ")
+		scopedCSS.WriteString(scopedSelector)
+		scopedCSS.WriteString(" {")
+		scopedCSS.WriteString(declarations)
+		scopedCSS.WriteString("}\n")
+	}
+
+	return scopedCSS.String()
 }
 
 // containedScopedCSS creates CSS scope for elements inside a container
@@ -312,71 +397,6 @@ func containedScopedCSS(css string, scopeClass string) string {
 		}
 
 		// Merge the transformed selectors
-		scopedSelector := strings.Join(scopedSelectors, ", ")
-		scopedCSS.WriteString(scopedSelector)
-		scopedCSS.WriteString(" {")
-		scopedCSS.WriteString(declarations)
-		scopedCSS.WriteString("}\n")
-	}
-
-	return scopedCSS.String()
-}
-
-func singleElementScopedCSS(css string, scopeClass string, rootElementTag string) string {
-	cssBlocks := strings.Split(css, "}")
-	var scopedCSS strings.Builder
-
-	for _, block := range cssBlocks {
-		if strings.TrimSpace(block) == "" {
-			continue
-		}
-
-		parts := strings.SplitN(block, "{", 2)
-		if len(parts) != 2 {
-			continue
-		}
-
-		selectors := parts[0]
-		declarations := parts[1]
-
-		// Split multiple selectors (separated by commas)
-		selectorList := strings.Split(selectors, ",")
-		var scopedSelectors []string
-
-		for _, selector := range selectorList {
-			selector = strings.TrimSpace(selector)
-			if selector == "" {
-				continue
-			}
-
-			if selector == rootElementTag {
-				// It's the root element itself, add the class directly
-				// Ex: "nav" -> "nav.s-dd47e2"
-				scopedSelectors = append(scopedSelectors, fmt.Sprintf("%s.%s", selector, scopeClass))
-			} else if strings.HasPrefix(selector, ".") {
-				// It is a class, it can be classes of the root element
-				// Ex: ".btn" -> ".s-ce50a0.btn" (no space!)
-				scopedSelectors = append(scopedSelectors, fmt.Sprintf(".%s%s", scopeClass, selector))
-			} else if strings.HasPrefix(selector, ":") {
-				// It is a pseudo-class, it can be from the root element
-				// Ex: ":hover" -> ".s-ce50a0:hover" or "button.s-ce50a0:hover"
-				if rootElementTag != "" {
-					scopedSelectors = append(scopedSelectors, fmt.Sprintf("%s.%s%s", rootElementTag, scopeClass, selector))
-				} else {
-					scopedSelectors = append(scopedSelectors, fmt.Sprintf(".%s%s", scopeClass, selector))
-				}
-			} else if strings.Contains(selector, " ") || strings.Contains(selector, ">") ||
-				strings.Contains(selector, "+") || strings.Contains(selector, "~") {
-				// It is a compound selector (descendants or siblings)
-				// Ex: "button span" -> ".s-ce50a0 button span"
-				scopedSelectors = append(scopedSelectors, fmt.Sprintf(".%s %s", scopeClass, selector))
-			} else {
-				// It is another element, probably a child element
-				// Ex: "span" -> ".s-ce50a0 span"
-				scopedSelectors = append(scopedSelectors, fmt.Sprintf(".%s %s", scopeClass, selector))
-			}
-		}
-
 		scopedSelector := strings.Join(scopedSelectors, ", ")
 		scopedCSS.WriteString(scopedSelector)
 		scopedCSS.WriteString(" {")

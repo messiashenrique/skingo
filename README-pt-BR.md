@@ -205,6 +205,12 @@ Usando os componetes na Página principal e também componentes aninhados.
 </template>
 ```
 
+O Skingo vai de forma inteligente determinar os escopos de CSS e criar automaticamente classes que auxiliam na estilização de cada componente, respeitando os estilos específicos em primeiro lugar.
+
+Se mais de um elemento sem pai (sem um contêiner) forem declarados entre as tags `<template><template>`, o Skingo criará de forma automática um cointêiner (`<div>`) para envolvê-los e assim separar inteligentemente os estilos entre os diversos componentes, respeitando cada escopo. 
+
+Para evitar esse comportamento acima, basta adicionar o atributo `unwrap` na tag "template", dessa forma: `<template unwrap>`.
+
 ## API
 
 ### NewTemplateSet
@@ -231,6 +237,8 @@ func (ts *TemplateSet) ExecuteIsolated(w io.Writer, filename string, data interf
 ```
 Renderiza um template de forma isolada, sem usar o layout. Útil para HTMX e requisições Ajax.
 * **Nota:** `ExecuteIsolated` não faz separação de escopo CSS. Portanto, o recomendado é que os estilos sejam declarados globalmente.
+
+Embora o `ExecuteIsolated` carregue o template sob demanda, ele usa o armazenamento em cache para, caso precise executar novamente o template, ele ja'esteja em memória, otimizando assim a performance.
 
 ## Funções de Template
 
@@ -278,7 +286,6 @@ ts.AddFuncs(template.FuncMap{
 | **Documentação Completa** | Documentação detalhada com exemplos para cada funcionalidade | Alta | 🔄 Em progresso |
 | **Integração HTMX** | Suporte aprimorado para HTMX com helpers dedicados | Alta | 📅 Planejado |
 | **Exemplos Avançados** | Repositório com exemplos mais complexos e casos de uso reais | Média | 📅 Planejado |
-| **Cache Inteligente** | Sistema de cache para melhorar o tempo de renderização | Média | 📅 Planejado |
 | **Hot Reload** | Suporte para hot reload durante o desenvolvimento | Média | 🔮 Considerando |
 | **Validação de Parâmetros** | Sistema de validação de parâmetros para componentes | Média | 📅 Planejado |
 | **Benchmarks** | Comparativo de performance com outras soluções | Média | 📅 Planejado |
@@ -286,7 +293,6 @@ ts.AddFuncs(template.FuncMap{
 | **Extensões para Ferramentas** | Plugins para IDEs e integrações com ferramentas de desenvolvimento | Baixa | 🔮 Considerando |
 | **Server Side Rendering** | Implementação de SSR otimizado para SPAs | Baixa | 🔮 Considerando |
 | **Design System Integrado** | Componentes base para facilitar a criação de interfaces consistentes | Baixa | 🔮 Considerando |
-| **Precompilação de Templates** | Ferramenta para precompilar templates e melhorar o desempenho | Baixa | 🔮 Considerando |
 
 ### Legenda
 - 🔄 Em progresso: Desenvolvimento iniciado

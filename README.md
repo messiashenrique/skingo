@@ -204,6 +204,12 @@ Using the components on the Home Page and also nested components.
 </template>
 ```
 
+Skingo will intelligently determine the CSS scopes and automatically create classes that help in styling each component, respecting first the specific styles.
+
+If more than one element without a parent (without a container) are declared between the `<template><template>` tags, Skingo will automatically create a container (`<div>`) to wrap them and thus intelligently separate the styles between the different components, respecting each scope.
+
+To avoid this behavior above, simply add the `unwrap` attribute to the "template" tag, like this: `<template unwrap>`.
+
 ## API
 
 ### NewTemplateSet
@@ -230,6 +236,8 @@ func (ts *TemplateSet) ExecuteIsolated(w io.Writer, filename string, data interf
 ```
 Renders a template in isolation, without using the layout. Useful for HTMX and Ajax requests.
 * **Note:** `ExecuteIsolated` does not separate CSS scope. Therefore, it is recommended that styles be declared globally.
+
+Although `ExecuteIsolated` load the template on demand, it uses caching so that if it needs to execute the template again, it is already in memory, thus optimizing performance.
 
 ## Template Functions
 
@@ -277,7 +285,6 @@ ts.AddFuncs(template.FuncMap{
 | **Full Documentation** | Detailed documentation with examples for each feature | High | 🔄 In progress |
 | **HTMX Integration** | Improved support for HTMX with dedicated helpers | High | 📅 Planned |
 | **Advanced Examples** | Repository with more complex examples and real use cases | Medium | 📅 Planned |
-| **Smart Caching** | Caching system to improve rendering time | Medium | 📅 Planned |
 | **Hot Reload** | Support for hot reload during development | Medium | 🔮 Considering |
 | **Parameter Validation** | Parameter validation system for components | Medium | 📅 Planned |
 | **Benchmarks** | Performance comparison with other solutions | Medium | 📅 Planned |
@@ -285,7 +292,6 @@ ts.AddFuncs(template.FuncMap{
 | **Extensions for Tools** | Plugins for IDEs and integrations with development tools | Low | 🔮 Considering |
 | **Server Side Rendering** | Implementation of SSR optimized for SPAs | Low | 🔮 Considering |
 | **Integrated Design System** | Base components to facilitate the creation of consistent interfaces | Low | 🔮 Considering |
-| **Template Precompilation** | Tool to precompile templates and improve performance | Low | 🔮 Considering |
 
 ### Caption
 - 🔄 **In progress**: Development has started
