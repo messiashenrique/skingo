@@ -40,8 +40,10 @@ type TemplateSet struct {
 	masterTmpl    *template.Template
 	templateHTML  map[string]string
 	mu            sync.Mutex
-	usedTemplates map[string]bool  // Track which templates have been used
-	customFuncs   template.FuncMap // Stores custom functions
+	usedTemplates map[string]bool               // Track which templates have been used
+	customFuncs   template.FuncMap              // Stores custom functions
+	isolatedCache map[string]*template.Template // Cache of isolated templates
+	cacheMu       sync.RWMutex                  // Specific mutex for cache
 }
 
 // defaultFuncs contains the default functions available in all templates
@@ -70,6 +72,14 @@ var defaultFuncs = template.FuncMap{
 	},
 }
 
+var (
+	htmlRegex     = regexp.MustCompile(`(?s)<template([^>]*)>(.*?)</template>`)
+	cssRegex      = regexp.MustCompile(`(?s)<style([^>]*)>(.*?)</style>`)
+	jsRegex       = regexp.MustCompile(`(?s)<script>(.*?)</script>`)
+	unwrapRegex   = regexp.MustCompile(`unwrap`)
+	firstTagRegex = regexp.MustCompile(`^\s*<([a-zA-Z][a-zA-Z0-9]*)([^>]*)>`)
+)
+
 // NewTemplateSet creates a new template set using the specified template
 // as the layout. The layout must contain <head> and <body> tags
 // where the CSS and JS will be automatically injected.
@@ -84,6 +94,7 @@ func NewTemplateSet(layoutName string) *TemplateSet {
 		templateHTML:  make(map[string]string),
 		usedTemplates: make(map[string]bool),
 		customFuncs:   make(template.FuncMap),
+		isolatedCache: make(map[string]*template.Template),
 	}
 
 	// Apply default functions immediately
@@ -137,23 +148,122 @@ func (ts *TemplateSet) parseFile(filename string) error {
 	}
 
 	// Extract the HTML, CSS and JS from template tags
-	htmlRegex := regexp.MustCompile(`(?s)<template>(.*?)</template>`)
 	if matches := htmlRegex.FindStringSubmatch(string(content)); len(matches) > 1 {
-		t.HTML = matches[1]
-	}
+		templateAttrs := matches[1]
+		templateContent := matches[2]
+		trimmedContent := strings.TrimSpace(templateContent)
 
-	// Extract the CSS from tags style
-	cssRegex := regexp.MustCompile(`(?s)<style>(.*?)</style>`)
-	if matches := cssRegex.FindStringSubmatch(string(content)); len(matches) > 1 {
-		css := matches[1]
-		t.HTML = fmt.Sprintf(`<div class="%s">%s</div>`, t.scopeClass, t.HTML)
-		t.CSS = simpleScopedCSS(css, t.scopeClass)
-	} else {
-		t.HTML = fmt.Sprintf(`<div class="%s">%s</div>`, t.scopeClass, t.HTML)
+		// Verify if has unwrap attribute
+		unwrap := unwrapRegex.MatchString(templateAttrs)
+
+		t.HTML = trimmedContent
+
+		// First, replace, temporaryly, the delimiters {{ }} to not interfere with the analysis
+		// Use a string id than difficultily to appear in the code
+		uniqueOpenToken := "___GO_TEMPLATE_OPEN___"
+		uniqueCloseToken := "___GO_TEMPLATE_CLOSE___"
+		safeContent := strings.ReplaceAll(trimmedContent, "{{", uniqueOpenToken)
+		safeContent = strings.ReplaceAll(safeContent, "}}", uniqueCloseToken)
+
+		// Verify if starts with a tag and to find how is
+		hasRootElement := false
+		isSingleElement := false // Flag for unique element, without children
+		rootTagName := ""        // Name of the root tag (for use in CSS)
+
+		// Regex to find the first opening tag
+		if firstTagMatch := firstTagRegex.FindStringSubmatch(safeContent); len(firstTagMatch) > 2 {
+			tagName := firstTagMatch[1]
+			rootTagName = tagName
+
+			// Check if it ends with the corresponding closing tag
+			closeTagPattern := fmt.Sprintf(`</\s*%s\s*>\s*$`, regexp.QuoteMeta(tagName))
+			closeTagRegex := regexp.MustCompile(closeTagPattern)
+
+			if closeTagRegex.MatchString(safeContent) {
+				hasRootElement = true
+
+				// Check if it is a unique element (no other elements between the tags)
+				// Remove the first tag and the last tag
+				innerContent := safeContent
+				openTagRegex := regexp.MustCompile(`^\s*<[^>]+>`)
+				innerContent = openTagRegex.ReplaceAllString(innerContent, "")
+				closeTagRegex := regexp.MustCompile(`</\s*[^>]+>\s*$`)
+				innerContent = closeTagRegex.ReplaceAllString(innerContent, "")
+
+				// If the inner content does not contain other HTML tags, it is a single element
+				if !strings.Contains(innerContent, "<") {
+					isSingleElement = true
+				}
+			}
+		}
+
+		// Extrair o CSS
+		var css string
+		if cssMatches := cssRegex.FindStringSubmatch(string(content)); len(cssMatches) > 2 {
+			css = cssMatches[2]
+		}
+
+		// If there is no CSS, we don't need to do anything with the scope
+		if css == "" {
+		} else if unwrap || hasRootElement {
+			if hasRootElement {
+				// Check if there is already a class, adding our class in several possible situations
+				if strings.Contains(t.HTML, "class=\"") {
+					// class="something"
+					t.HTML = strings.Replace(t.HTML, "class=\"", fmt.Sprintf("class=\"%s ", t.scopeClass), 1)
+				} else if strings.Contains(t.HTML, "class='") {
+					// class='something'
+					t.HTML = strings.Replace(t.HTML, "class='", fmt.Sprintf("class='%s ", t.scopeClass), 1)
+				} else if strings.Contains(t.HTML, "class={{") {
+					// class={{ }}
+					t.HTML = strings.Replace(t.HTML, "class={{", fmt.Sprintf("class=\"%s {{", t.scopeClass), 1)
+				} else {
+					// There is no class attribute, we need to add it before the >
+					// Since we are working with the original HTML, we need to be careful
+					// not to interfere with the template delimiters
+
+					// Find the insertion point (before the > of the first element)
+					lastPos := -1
+					depth := 0
+					for i, char := range t.HTML {
+						if char == '{' {
+							depth++
+						} else if char == '}' {
+							depth--
+						} else if char == '>' && depth == 0 {
+							lastPos = i
+							break
+						}
+					}
+
+					if lastPos != -1 {
+						// Inserir o atributo class antes do >
+						t.HTML = t.HTML[:lastPos] + fmt.Sprintf(" class=\"%s\"", t.scopeClass) + t.HTML[lastPos:]
+					}
+				}
+
+				// Process CSS according to element type
+				if isSingleElement || unwrap {
+					// It is a single element or has explicit unwrap
+					// We use direct scope (element.class)
+					t.CSS = singleElementScopedCSS(css, t.scopeClass, rootTagName)
+				} else {
+					// Element with children, we use contained scope (.element class)
+					t.CSS = containedScopedCSS(css, t.scopeClass)
+				}
+			} else {
+				// No root element, but with unwrap, we use a custom selector instead of class
+				t.HTML = fmt.Sprintf(`<div class="%s" style="display:contents">%s</div>`, t.scopeClass, t.HTML)
+				t.CSS = containedScopedCSS(css, t.scopeClass)
+			}
+		} else {
+			// Caso padrão: wrap com div
+			t.HTML = fmt.Sprintf(`<div class="%s">%s</div>`, t.scopeClass, t.HTML)
+			t.CSS = containedScopedCSS(css, t.scopeClass)
+		}
 	}
 
 	// Extract the JS from tags script
-	jsRegex := regexp.MustCompile(`(?s)<script>(.*?)</script>`)
 	if matches := jsRegex.FindStringSubmatch(string(content)); len(matches) > 1 {
 		t.JS = matches[1]
 	}
@@ -165,11 +275,56 @@ func (ts *TemplateSet) parseFile(filename string) error {
 	return nil
 }
 
-// simpleScopedCSS prefix the scope class to all CSS selectors
-func simpleScopedCSS(css string, scopeClass string) string {
-	// We divide CSS into blocks of rules
+// containedScopedCSS creates CSS scope for elements inside a container
+// (for example, when elements are inside a div with the scope class)
+func containedScopedCSS(css string, scopeClass string) string {
+	// Split CSS into blocks of rules
 	cssBlocks := strings.Split(css, "}")
-	result := make([]string, 0, len(cssBlocks))
+	var scopedCSS strings.Builder
+
+	for _, block := range cssBlocks {
+		if strings.TrimSpace(block) == "" {
+			continue
+		}
+
+		// Split into selector and declarations
+		parts := strings.SplitN(block, "{", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		selectors := parts[0]
+		declarations := parts[1]
+
+		// Split multiple selectors (separated by commas)
+		selectorList := strings.Split(selectors, ",")
+		var scopedSelectors []string
+
+		for _, selector := range selectorList {
+			selector = strings.TrimSpace(selector)
+			if selector == "" {
+				continue
+			}
+
+			// For any type of selector, we use the scope class as the ancestor
+			// This works for elements (h1, p, a) and for classes (.btn, .blue)
+			scopedSelectors = append(scopedSelectors, fmt.Sprintf(".%s %s", scopeClass, selector))
+		}
+
+		// Merge the transformed selectors
+		scopedSelector := strings.Join(scopedSelectors, ", ")
+		scopedCSS.WriteString(scopedSelector)
+		scopedCSS.WriteString(" {")
+		scopedCSS.WriteString(declarations)
+		scopedCSS.WriteString("}\n")
+	}
+
+	return scopedCSS.String()
+}
+
+func singleElementScopedCSS(css string, scopeClass string, rootElementTag string) string {
+	cssBlocks := strings.Split(css, "}")
+	var scopedCSS strings.Builder
 
 	for _, block := range cssBlocks {
 		if strings.TrimSpace(block) == "" {
@@ -177,24 +332,59 @@ func simpleScopedCSS(css string, scopeClass string) string {
 		}
 
 		parts := strings.SplitN(block, "{", 2)
-		if len(parts) < 2 {
-			// Not a valid CSS block
-			result = append(result, block)
+		if len(parts) != 2 {
 			continue
 		}
 
-		selectors := strings.Split(parts[0], ",")
-		transformedSelectors := make([]string, 0, len(selectors))
+		selectors := parts[0]
+		declarations := parts[1]
 
-		for _, sel := range selectors {
-			sel = strings.TrimSpace(sel)
-			transformedSelectors = append(transformedSelectors, fmt.Sprintf(".%s %s", scopeClass, sel))
+		// Split multiple selectors (separated by commas)
+		selectorList := strings.Split(selectors, ",")
+		var scopedSelectors []string
+
+		for _, selector := range selectorList {
+			selector = strings.TrimSpace(selector)
+			if selector == "" {
+				continue
+			}
+
+			if selector == rootElementTag {
+				// It's the root element itself, add the class directly
+				// Ex: "nav" -> "nav.s-dd47e2"
+				scopedSelectors = append(scopedSelectors, fmt.Sprintf("%s.%s", selector, scopeClass))
+			} else if strings.HasPrefix(selector, ".") {
+				// It is a class, it can be classes of the root element
+				// Ex: ".btn" -> ".s-ce50a0.btn" (no space!)
+				scopedSelectors = append(scopedSelectors, fmt.Sprintf(".%s%s", scopeClass, selector))
+			} else if strings.HasPrefix(selector, ":") {
+				// It is a pseudo-class, it can be from the root element
+				// Ex: ":hover" -> ".s-ce50a0:hover" or "button.s-ce50a0:hover"
+				if rootElementTag != "" {
+					scopedSelectors = append(scopedSelectors, fmt.Sprintf("%s.%s%s", rootElementTag, scopeClass, selector))
+				} else {
+					scopedSelectors = append(scopedSelectors, fmt.Sprintf(".%s%s", scopeClass, selector))
+				}
+			} else if strings.Contains(selector, " ") || strings.Contains(selector, ">") ||
+				strings.Contains(selector, "+") || strings.Contains(selector, "~") {
+				// It is a compound selector (descendants or siblings)
+				// Ex: "button span" -> ".s-ce50a0 button span"
+				scopedSelectors = append(scopedSelectors, fmt.Sprintf(".%s %s", scopeClass, selector))
+			} else {
+				// It is another element, probably a child element
+				// Ex: "span" -> ".s-ce50a0 span"
+				scopedSelectors = append(scopedSelectors, fmt.Sprintf(".%s %s", scopeClass, selector))
+			}
 		}
 
-		result = append(result, fmt.Sprintf("%s {%s", strings.Join(transformedSelectors, ", "), parts[1]))
+		scopedSelector := strings.Join(scopedSelectors, ", ")
+		scopedCSS.WriteString(scopedSelector)
+		scopedCSS.WriteString(" {")
+		scopedCSS.WriteString(declarations)
+		scopedCSS.WriteString("}\n")
 	}
 
-	return strings.Join(result, "}\n") + "}"
+	return scopedCSS.String()
 }
 
 // parseLayoutFile processes a layout template file
@@ -565,6 +755,15 @@ func (ts *TemplateSet) Execute(w io.Writer, name string, data interface{}) error
 // Returns an error if the file cannot be read or if an error occurs during
 // template execution.
 func (ts *TemplateSet) ExecuteIsolated(w io.Writer, filename string, data interface{}) error {
+
+	ts.cacheMu.RLock()
+	cachedTmpl, exists := ts.isolatedCache[filename]
+	ts.cacheMu.RUnlock()
+
+	if exists {
+		return cachedTmpl.Execute(w, data) // Use the cached template
+	}
+
 	content, err := os.ReadFile(filename)
 	if err != nil {
 		return fmt.Errorf("error reading template file: %w", err)
@@ -574,7 +773,6 @@ func (ts *TemplateSet) ExecuteIsolated(w io.Writer, filename string, data interf
 	name = strings.TrimSuffix(name, filepath.Ext(name))
 
 	var htmlContent string
-	htmlRegex := regexp.MustCompile(`(?s)<template>(.*?)</template>`)
 	if matches := htmlRegex.FindStringSubmatch(string(content)); len(matches) > 1 {
 		htmlContent = matches[1]
 	} else {
@@ -582,17 +780,18 @@ func (ts *TemplateSet) ExecuteIsolated(w io.Writer, filename string, data interf
 	}
 
 	isolatedTmpl := template.New(name + "_isolated")
-
-	// Add default functions
-	isolatedTmpl.Funcs(defaultFuncs)
-
-	// Add custom functions
-	isolatedTmpl.Funcs(ts.customFuncs)
+	isolatedTmpl.Funcs(defaultFuncs)   // Add default functions
+	isolatedTmpl.Funcs(ts.customFuncs) // Add custom functions
 
 	parsedTmpl, err := isolatedTmpl.Parse(htmlContent)
 	if err != nil {
 		return fmt.Errorf("error parsing isolated template: %w", err)
 	}
+
+	// Add to cache
+	ts.cacheMu.Lock()
+	ts.isolatedCache[filename] = parsedTmpl
+	ts.cacheMu.Unlock()
 
 	// Execute the isolated template with data
 	return parsedTmpl.Execute(w, data)
