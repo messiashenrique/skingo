@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset="UTF-8">
+	<title>Skingo - Components Example</title>
+	<style>
+		/* global CSS of layout */
+		:root {
+			--primary-color: #d04545;
+			--secondary-color: #0378cb;
+		}
+
+		body {
+			font-family: Arial, sans-serif;
+			margin: 0;
+			padding: 0;
+		}
+
+		h1 {
+			color: var(--secondary-color);
+		}
+
+		main {
+			margin: 1rem;
+		}
+	</style>
+</head>
+
+<body>
+
+	{{ comp "navbar" (dict "title" "Skingo - Embedded Templates Example")}}
+
+	<main>
+		{{ .Yield }}
+	</main>
+
+	<script>
+		console.log('Loaded layout'); // global JavaScript of layout
+	</script>
+</body>
+
+</html>

@@ -1,0 +1,38 @@
+<template>
+  <div class="container">
+    <h1>{{.Title}}</h1>
+    <p>{{.Content}}</p>
+
+    <!-- Using components with named parameters -->
+    {{ comp "card.html" (dict 
+      "title" "Card Example" 
+      "content" "This is an example of a card component with a button." 
+      "buttonText" "Read more"
+    ) }}
+    
+    {{ comp "card.html" (dict 
+      "title" "Other Card" 
+      "content" "Components can be easily reused with different content." 
+      "buttonText" "Find out more"
+      "detail" "This is a detail"
+    ) }}
+    
+    <!-- Using component with positional parameters and optional 2nd parameter -->
+    {{ comp "button.html" "Click me!" "green" }}
+    
+  </div>
+</template>
+
+<style>
+  .container {
+    max-width: 800px;
+    background-color: #eeeeee;
+    margin: 0 auto;
+    padding: 2rem;
+  }
+
+  h1 {
+    color: #2d3748;
+    margin-bottom: 1rem;
+  }
+</style>

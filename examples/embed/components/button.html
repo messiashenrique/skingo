@@ -1,0 +1,32 @@
+<template>
+  <button class="btn {{ paramOr 1 "blue"}}">{{ param 0 }}</button>
+</template>
+
+<style>
+	.btn {
+		margin: 0.5rem 0;
+		padding: 0.5rem 1rem;
+		color: white;
+		border-radius: 0.25rem;
+		border: none;
+		cursor: pointer;
+	}
+
+	.blue {
+		background-color: #3490dc;
+	}
+
+	.green {
+		background-color: #019001;
+	}
+</style>
+
+<script>
+	console.log("Loaded button!");
+	btn = document.querySelector(".green");
+	if (btn) {
+		btn.addEventListener("click", function () {
+			alert("Green Button clicked!");
+		});
+	}
+</script>
