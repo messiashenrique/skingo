@@ -6,6 +6,11 @@
     </div>
     <div class="card-body">
       <p>{{.content}}</p>
+			{{ if .detail }}
+				<div class="detail">
+					<h3>{{ .detail }}</h3>
+				</div>
+			{{ end }}
     </div>
     <div class="card-footer">
 			<!-- Using component with positional parameters -->
@@ -42,5 +47,15 @@
 		padding: 0.25rem;
 		background-color: #f7fafc;
 		border-top: 0.0625rem solid #e2e8f0;
+	}
+
+	.detail {
+		border: 0.125rem solid var(--secondary-color);
+		border-radius: 0.5rem;
+		padding: 0.2rem 0.75rem;
+	}
+
+	.detail h3 {
+		color: var(--secondary-color);
 	}
 </style>

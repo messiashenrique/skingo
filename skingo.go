@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -123,155 +124,6 @@ func generateScopeClass(name string) string {
 	hash := md5.Sum([]byte(name))
 	// Return the first six characters of the hash
 	return fmt.Sprintf("s-%x", hash)[:8]
-}
-
-// parseFile analyze a file and extract HTML, CSS and JS
-func (ts *TemplateSet) parseFile(filename string) error {
-
-	content, err := os.ReadFile(filename)
-	if err != nil {
-		return err
-	}
-
-	name := filepath.Base(filename)
-	name = strings.TrimSuffix(name, filepath.Ext(name))
-
-	// Processes layout in a special way
-	if name == ts.layoutName {
-		return ts.parseLayoutFile(string(content))
-	}
-
-	t := &Template{
-		Name:       name,
-		scopeClass: generateScopeClass(name),
-	}
-
-	// Extract the HTML, CSS and JS from template tags
-	if matches := htmlRegex.FindStringSubmatch(string(content)); len(matches) > 1 {
-		templateAttrs := matches[1]
-		templateContent := matches[2]
-		trimmedContent := strings.TrimSpace(templateContent)
-
-		// Verify if has unwrap attribute
-		unwrap := unwrapRegex.MatchString(templateAttrs)
-
-		t.HTML = trimmedContent
-
-		// First, temporarily replace the {{ }} delimiters so as not to interfere with parsing
-		safeContent := strings.ReplaceAll(trimmedContent, "{{", uniqueOpenToken)
-		safeContent = strings.ReplaceAll(safeContent, "}}", uniqueCloseToken)
-
-		// Verify if it starts with an opening tag and find which it is
-		hasRootElement := false
-		isSingleElement := false
-		isRootContainer := false // Flag for identifying a root container
-		rootTagName := ""
-		rootClasses := []string{} // Store the classes of the root element
-
-		// Regex for finding the first opening tag
-		if firstTagMatch := firstTagRegex.FindStringSubmatch(safeContent); len(firstTagMatch) > 2 {
-			tagName := firstTagMatch[1]
-			rootTagName = tagName
-
-			// Extract classes from root element
-			rootAttributes := firstTagMatch[2]
-			if classMatches := classRegex.FindStringSubmatch(rootAttributes); len(classMatches) > 1 {
-				classStr := classMatches[1]
-				// Split classes by space and append
-				rootClasses = append(rootClasses, strings.Fields(classStr)...)
-			}
-
-			// Verify if it ends with the corresponding closing tag
-			closeTagPattern := fmt.Sprintf(`</\s*%s\s*>\s*$`, regexp.QuoteMeta(tagName))
-			closeTagRegex := regexp.MustCompile(closeTagPattern)
-
-			if closeTagRegex.MatchString(safeContent) {
-				hasRootElement = true
-
-				// Verify if it's a single element (without other elements between the tags)
-				innerContent := safeContent
-				innerContent = openTagRegex.ReplaceAllString(innerContent, "")
-				closeTagRegex := regexp.MustCompile(`</\s*[^>]+>\s*$`)
-				innerContent = closeTagRegex.ReplaceAllString(innerContent, "")
-
-				if !strings.Contains(innerContent, "<") {
-					isSingleElement = true
-				} else {
-					isRootContainer = true
-				}
-			}
-		}
-
-		// Extract the CSS
-		var css string
-		if cssMatches := cssRegex.FindStringSubmatch(string(content)); len(cssMatches) > 2 {
-			css = cssMatches[2]
-		}
-
-		// If there is no CSS, we don't need to do anything with the scope
-		if css == "" {
-		} else if unwrap || hasRootElement {
-			if hasRootElement {
-				// Verify if there is a class attribute, adding our class in various possible situations
-				if strings.Contains(t.HTML, "class=\"") {
-					t.HTML = strings.Replace(t.HTML, "class=\"", fmt.Sprintf("class=\"%s ", t.scopeClass), 1)
-				} else if strings.Contains(t.HTML, "class='") {
-					t.HTML = strings.Replace(t.HTML, "class='", fmt.Sprintf("class='%s ", t.scopeClass), 1)
-				} else if strings.Contains(t.HTML, "class={{") {
-					t.HTML = strings.Replace(t.HTML, "class={{", fmt.Sprintf("class=\"%s {{", t.scopeClass), 1)
-				} else {
-					// Without class attribute, we need to add before the >
-					lastPos := -1
-					depth := 0
-					for i, char := range t.HTML {
-						if char == '{' {
-							depth++
-						} else if char == '}' {
-							depth--
-						} else if char == '>' && depth == 0 {
-							lastPos = i
-							break
-						}
-					}
-
-					if lastPos != -1 {
-						t.HTML = t.HTML[:lastPos] + fmt.Sprintf(" class=\"%s\"", t.scopeClass) + t.HTML[lastPos:]
-					}
-				}
-
-				// Process CSS according to element type
-				var elementType int
-				if isSingleElement || unwrap {
-					elementType = ElementTypeSingle
-				} else if isRootContainer {
-					elementType = ElementTypeContainer
-				} else {
-					elementType = ElementTypeNormal
-				}
-
-				t.CSS = scopedCSS(css, t.scopeClass, rootTagName, rootClasses, elementType)
-			} else {
-				// Whithout root element, but with unwrap, we use a custom selector instead of class
-				t.HTML = fmt.Sprintf(`<div class="%s" style="display:contents">%s</div>`, t.scopeClass, t.HTML)
-				t.CSS = containedScopedCSS(css, t.scopeClass)
-			}
-		} else {
-			// Default case: wrap with div
-			t.HTML = fmt.Sprintf(`<div class="%s">%s</div>`, t.scopeClass, t.HTML)
-			t.CSS = containedScopedCSS(css, t.scopeClass)
-		}
-	}
-
-	// Extract the JS from tags script
-	if matches := jsRegex.FindStringSubmatch(string(content)); len(matches) > 1 {
-		t.JS = matches[1]
-	}
-
-	// Stores the template for later processing
-	ts.templates[t.Name] = t
-	ts.templateHTML[t.Name] = t.HTML
-
-	return nil
 }
 
 // scopedCSS creates CSS scope for elements inside a container
@@ -438,55 +290,149 @@ func (ts *TemplateSet) parseLayoutFile(content string) error {
 	return nil
 }
 
-// ParseDirs parses all HTML/template files in the given directories.
-// The method processes files with the .html or .tmpl extension, extracting
-// components that contain <template>, <style>, and <script> tags.
-//
-// For each file, the content inside the <template> tag is extracted as HTML.
-// The content inside the <style> tag is extracted as CSS and automatically
-// scoped using unique classes to avoid conflicts.
-// The content inside the <script> tag is extracted as JavaScript.
-//
-// The method requires that a layout template (defined when creating the
-// TemplateSet) be found in at least one of the given directories.
-//
-// After processing, the templates are available for rendering via
-// the Execute method, with their CSS styles and JS scripts automatically
-// included in the appropriate places in the layout.
-//
-// Returns an error if any directory cannot be read, if any template
-// cannot be parsed, or if the layout template is not found.
-// ParseDirs parses all HTML/template files in the given directories.
-func (ts *TemplateSet) ParseDirs(dirs ...string) error {
-	layoutFound := false
+// processTemplate processes a single template and extracts HTML, CSS, and JS
+func (ts *TemplateSet) processTemplate(name string, content []byte) error {
+	// Process layout in a special way
+	if name == ts.layoutName {
+		return ts.parseLayoutFile(string(content))
+	}
 
-	for _, dir := range dirs {
-		files, err := os.ReadDir(dir)
-		if err != nil {
-			return fmt.Errorf("error reading directory %s: %w", dir, err)
+	t := &Template{
+		Name:       name,
+		scopeClass: generateScopeClass(name),
+	}
+
+	// Extract the HTML, CSS and JS from template tags
+	if matches := htmlRegex.FindStringSubmatch(string(content)); len(matches) > 1 {
+		templateAttrs := matches[1]
+		templateContent := matches[2]
+		trimmedContent := strings.TrimSpace(templateContent)
+
+		// Verify if has unwrap attribute
+		unwrap := unwrapRegex.MatchString(templateAttrs)
+
+		t.HTML = trimmedContent
+
+		// First, temporarily replace the {{ }} delimiters so as not to interfere with parsing
+		safeContent := strings.ReplaceAll(trimmedContent, "{{", uniqueOpenToken)
+		safeContent = strings.ReplaceAll(safeContent, "}}", uniqueCloseToken)
+
+		// Verify if it starts with an opening tag and find which it is
+		hasRootElement := false
+		isSingleElement := false
+		isRootContainer := false // Flag for identifying a root container
+		rootTagName := ""
+		rootClasses := []string{} // Store the classes of the root element
+
+		// Regex for finding the first opening tag
+		if firstTagMatch := firstTagRegex.FindStringSubmatch(safeContent); len(firstTagMatch) > 2 {
+			tagName := firstTagMatch[1]
+			rootTagName = tagName
+
+			// Extract classes from root element
+			rootAttributes := firstTagMatch[2]
+			if classMatches := classRegex.FindStringSubmatch(rootAttributes); len(classMatches) > 1 {
+				classStr := classMatches[1]
+				// Split classes by space and append
+				rootClasses = append(rootClasses, strings.Fields(classStr)...)
+			}
+
+			// Verify if it ends with the corresponding closing tag
+			closeTagPattern := fmt.Sprintf(`</\s*%s\s*>\s*$`, regexp.QuoteMeta(tagName))
+			closeTagRegex := regexp.MustCompile(closeTagPattern)
+
+			if closeTagRegex.MatchString(safeContent) {
+				hasRootElement = true
+
+				// Verify if it's a single element (without other elements between the tags)
+				innerContent := safeContent
+				innerContent = openTagRegex.ReplaceAllString(innerContent, "")
+				closeTagRegex := regexp.MustCompile(`</\s*[^>]+>\s*$`)
+				innerContent = closeTagRegex.ReplaceAllString(innerContent, "")
+
+				if !strings.Contains(innerContent, "<") {
+					isSingleElement = true
+				} else {
+					isRootContainer = true
+				}
+			}
 		}
 
-		// First pass: read all files and extract HTML, CSS and JS
-		for _, file := range files {
-			if file.IsDir() {
-				continue
-			}
-			if filepath.Ext(file.Name()) == ".html" || filepath.Ext(file.Name()) == ".tmpl" {
-				name := strings.TrimSuffix(file.Name(), filepath.Ext(file.Name()))
-				if name == ts.layoutName {
-					layoutFound = true
+		// Extract the CSS
+		var css string
+		if cssMatches := cssRegex.FindStringSubmatch(string(content)); len(cssMatches) > 2 {
+			css = cssMatches[2]
+		}
+
+		// If there is no CSS, we don't need to do anything with the scope
+		if css == "" {
+			// Nothing to do
+		} else if unwrap || hasRootElement {
+			if hasRootElement {
+				// Verify if there is a class attribute, adding our class in various possible situations
+				if strings.Contains(t.HTML, "class=\"") {
+					t.HTML = strings.Replace(t.HTML, "class=\"", fmt.Sprintf("class=\"%s ", t.scopeClass), 1)
+				} else if strings.Contains(t.HTML, "class='") {
+					t.HTML = strings.Replace(t.HTML, "class='", fmt.Sprintf("class='%s ", t.scopeClass), 1)
+				} else if strings.Contains(t.HTML, "class={{") {
+					t.HTML = strings.Replace(t.HTML, "class={{", fmt.Sprintf("class=\"%s {{", t.scopeClass), 1)
+				} else {
+					// Without class attribute, we need to add before the >
+					lastPos := -1
+					depth := 0
+					for i, char := range t.HTML {
+						if char == '{' {
+							depth++
+						} else if char == '}' {
+							depth--
+						} else if char == '>' && depth == 0 {
+							lastPos = i
+							break
+						}
+					}
+
+					if lastPos != -1 {
+						t.HTML = t.HTML[:lastPos] + fmt.Sprintf(" class=\"%s\"", t.scopeClass) + t.HTML[lastPos:]
+					}
 				}
-				if err := ts.parseFile(filepath.Join(dir, file.Name())); err != nil {
-					return fmt.Errorf("error parsing file %s: %w", file.Name(), err)
+
+				// Process CSS according to element type
+				var elementType int
+				if isSingleElement || unwrap {
+					elementType = ElementTypeSingle
+				} else if isRootContainer {
+					elementType = ElementTypeContainer
+				} else {
+					elementType = ElementTypeNormal
 				}
+
+				t.CSS = scopedCSS(css, t.scopeClass, rootTagName, rootClasses, elementType)
+			} else {
+				// Without root element, but with unwrap, we use a custom selector instead of class
+				t.HTML = fmt.Sprintf(`<div class="%s" style="display:contents">%s</div>`, t.scopeClass, t.HTML)
+				t.CSS = containedScopedCSS(css, t.scopeClass)
 			}
+		} else {
+			// Default case: wrap with div
+			t.HTML = fmt.Sprintf(`<div class="%s">%s</div>`, t.scopeClass, t.HTML)
+			t.CSS = containedScopedCSS(css, t.scopeClass)
 		}
 	}
 
-	if !layoutFound {
-		return fmt.Errorf("layout template '%s' not found in any of the provided directories", ts.layoutName)
+	// Extract the JS from tags script
+	if matches := jsRegex.FindStringSubmatch(string(content)); len(matches) > 1 {
+		t.JS = matches[1]
 	}
 
+	// Stores the template for later processing
+	ts.templates[t.Name] = t
+	ts.templateHTML[t.Name] = t.HTML
+
+	return nil
+}
+
+// finalizeParsing completes the template processing after all individual templates have been parsed
+func (ts *TemplateSet) finalizeParsing() error {
 	type compCall struct {
 		Args []interface{}
 		Name string
@@ -494,10 +440,9 @@ func (ts *TemplateSet) ParseDirs(dirs ...string) error {
 
 	// Component call stack for handling nested components
 	var compStack []compCall
-
 	var compMu sync.Mutex
 
-	// Globals functions for all templates
+	// Global functions for all templates
 	internalFuncs := template.FuncMap{
 		"_register_template": func(name string) string {
 			ts.mu.Lock()
@@ -574,7 +519,6 @@ func (ts *TemplateSet) ParseDirs(dirs ...string) error {
 			}()
 
 			var buf strings.Builder
-
 			var data interface{}
 
 			if len(args) == 1 {
@@ -640,9 +584,9 @@ func (ts *TemplateSet) ParseDirs(dirs ...string) error {
 		layoutFuncs[name] = fn
 	}
 
-	// Add internal functions to layout - especialmente 'comp'
+	// Add internal functions to layout - especially 'comp'
 	for name, fn := range internalFuncs {
-		// Adicionar apenas funções úteis para o layout
+		// Add only useful functions for the layout
 		if name == "comp" || name == "dict" || name == "param" || name == "paramOr" {
 			layoutFuncs[name] = fn
 		}
@@ -658,6 +602,203 @@ func (ts *TemplateSet) ParseDirs(dirs ...string) error {
 	ts.layout.tmpl = layoutTmpl
 
 	return nil
+}
+
+// parseFile analyze a file and extract HTML, CSS and JS
+func (ts *TemplateSet) parseFile(filename string) error {
+	content, err := os.ReadFile(filename)
+	if err != nil {
+		return err
+	}
+
+	name := filepath.Base(filename)
+	name = strings.TrimSuffix(name, filepath.Ext(name))
+
+	return ts.processTemplate(name, content)
+}
+
+// ParseDirs parses all HTML/template files in the given directories.
+// The method processes files with the .html or .tmpl extension, extracting
+// components that contain <template>, <style>, and <script> tags.
+//
+// For each file, the content inside the <template> tag is extracted as HTML.
+// The content inside the <style> tag is extracted as CSS and automatically
+// scoped using unique classes to avoid conflicts.
+// The content inside the <script> tag is extracted as JavaScript.
+//
+// The method requires that a layout template (defined when creating the
+// TemplateSet) be found in at least one of the given directories.
+//
+// After processing, the templates are available for rendering via
+// the Execute method, with their CSS styles and JS scripts automatically
+// included in the appropriate places in the layout.
+//
+// Returns an error if any directory cannot be read, if any template
+// cannot be parsed, or if the layout template is not found.
+func (ts *TemplateSet) ParseDirs(dirs ...string) error {
+	layoutFound := false
+
+	for _, dir := range dirs {
+		files, err := os.ReadDir(dir)
+		if err != nil {
+			return fmt.Errorf("error reading directory %s: %w", dir, err)
+		}
+
+		// First pass: read all files and extract HTML, CSS and JS
+		for _, file := range files {
+			if file.IsDir() {
+				continue
+			}
+			if filepath.Ext(file.Name()) == ".html" || filepath.Ext(file.Name()) == ".tmpl" {
+				name := strings.TrimSuffix(file.Name(), filepath.Ext(file.Name()))
+				if name == ts.layoutName {
+					layoutFound = true
+				}
+				if err := ts.parseFile(filepath.Join(dir, file.Name())); err != nil {
+					return fmt.Errorf("error parsing file %s: %w", file.Name(), err)
+				}
+			}
+		}
+	}
+
+	if !layoutFound {
+		return fmt.Errorf("layout template '%s' not found in any of the provided directories", ts.layoutName)
+	}
+
+	return ts.finalizeParsing()
+}
+
+// ParseFS parses all HTML/template files in the given embedded filesystem.
+// This method allows using Go's embed feature to include templates
+// directly in the binary.
+//
+// The method accepts multiple root directories within the filesystem to scan for templates.
+// It processes files with the .html or .tmpl extension, extracting
+// components that contain <template>, <style>, and <script> tags.
+//
+// Similar to ParseDirs, this method requires that a layout template
+// (defined when creating the TemplateSet) be found in at least one of the
+// specified directories.
+//
+// Example usage with embed:
+//
+//	//go:embed templates/**/*.html
+//	var templateFS embed.FS
+//
+//	ts := skingo.NewTemplateSet("layout")
+//	err := ts.ParseFS(templateFS, "templates/pages", "templates/components")
+//
+// Returns an error if any template cannot be parsed
+// or if the layout template is not found.
+func (ts *TemplateSet) ParseFS(filesystem fs.FS, roots ...string) error {
+	layoutFound := false
+
+	for _, root := range roots {
+		// Read all files in this root directory of the filesystem
+		err := fs.WalkDir(filesystem, root, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+
+			// Skip directories
+			if d.IsDir() {
+				return nil
+			}
+
+			// Process only HTML and template files
+			ext := filepath.Ext(d.Name())
+			if ext != ".html" && ext != ".tmpl" {
+				return nil
+			}
+
+			// Extract the template name
+			name := strings.TrimSuffix(d.Name(), ext)
+			if name == ts.layoutName {
+				layoutFound = true
+			}
+
+			// Read file content
+			content, err := fs.ReadFile(filesystem, path)
+			if err != nil {
+				return fmt.Errorf("error reading file %s: %w", path, err)
+			}
+
+			// Process the template
+			return ts.processTemplate(name, content)
+		})
+
+		if err != nil {
+			return fmt.Errorf("error processing embedded filesystem path %s: %w", root, err)
+		}
+	}
+
+	if !layoutFound {
+		return fmt.Errorf("layout template '%s' not found in any of the provided filesystem paths", ts.layoutName)
+	}
+
+	return ts.finalizeParsing()
+}
+
+// ExecuteIsolatedFS renders a template directly from an embedded filesystem,
+// without using the configured layout.
+//
+// This method is similar to ExecuteIsolated but works with embedded filesystems.
+// It is ideal for use with 'HTMX', Ajax requests, or any scenario where only an
+// HTML fragment is needed.
+//
+// The 'fsPath' parameter must be the path within the filesystem.
+//
+// Example usage with embed:
+//
+//	//go:embed templates
+//	var templateFS embed.FS
+//
+//	err := ts.ExecuteIsolatedFS(w, templateFS, "templates/fragment.html", data)
+//
+// Returns an error if the file cannot be read or if an error occurs during
+// template execution.
+func (ts *TemplateSet) ExecuteIsolatedFS(w io.Writer, filesystem fs.FS, fsPath string, data interface{}) error {
+	cacheKey := fmt.Sprintf("embed:%s", fsPath)
+
+	ts.cacheMu.RLock()
+	cachedTmpl, exists := ts.isolatedCache[cacheKey]
+	ts.cacheMu.RUnlock()
+
+	if exists {
+		return cachedTmpl.Execute(w, data) // Use the cached template
+	}
+
+	content, err := fs.ReadFile(filesystem, fsPath)
+	if err != nil {
+		return fmt.Errorf("error reading template file from filesystem: %w", err)
+	}
+
+	name := filepath.Base(fsPath)
+	name = strings.TrimSuffix(name, filepath.Ext(name))
+
+	var htmlContent string
+	if matches := htmlRegex.FindStringSubmatch(string(content)); len(matches) > 1 {
+		htmlContent = matches[2] // Use index 2 which contains the actual content
+	} else {
+		htmlContent = string(content)
+	}
+
+	isolatedTmpl := template.New(name + "_isolated")
+	isolatedTmpl.Funcs(defaultFuncs)   // Add default functions
+	isolatedTmpl.Funcs(ts.customFuncs) // Add custom functions
+
+	parsedTmpl, err := isolatedTmpl.Parse(htmlContent)
+	if err != nil {
+		return fmt.Errorf("error parsing isolated template from filesystem: %w", err)
+	}
+
+	// Add to cache
+	ts.cacheMu.Lock()
+	ts.isolatedCache[cacheKey] = parsedTmpl
+	ts.cacheMu.Unlock()
+
+	// Execute the isolated template with data
+	return parsedTmpl.Execute(w, data)
 }
 
 // ParseDir invokes ParseDirs, but with a unique directory.

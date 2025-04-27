@@ -210,6 +210,52 @@ If more than one element without a parent (without a container) are declared bet
 
 To avoid this behavior above, simply add the `unwrap` attribute to the "template" tag, like this: `<template unwrap>`.
 
+### Example with Embedded Filesystem
+```go
+//main.go
+package main
+
+import (
+    "embed"
+    "log"
+    "net/http"
+    "github.com/messiashenrique/skingo"
+)
+
+//go:embed templates/**/*.html
+var templateFS embed.FS
+
+func main() {
+    // Create a new template set with "layout" as the layout template
+    ts := skingo.NewTemplateSet("layout")
+    
+    // Parse templates in the embedded filesystem
+    if err := ts.ParseFS(templateFS, "templates/pages", "templates/components"); err != nil {
+        log.Fatalf("Error parsing templates: %v", err)
+    }
+    
+    // Handler for the home page
+    http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+        if err := ts.Execute(w, "home", map[string]interface{}{
+            "Title": "Home Page",
+            "Content": "Welcome to Skingo with embedded templates!",
+        }); err != nil {
+            http.Error(w, err.Error(), http.StatusInternalServerError)
+        }
+    })
+    
+    // Handler for HTMX requests that only need fragments
+    http.HandleFunc("/fragment", func(w http.ResponseWriter, r *http.Request) {
+        if err := ts.ExecuteIsolatedFS(w, templateFS, "templates/fragments/partial.html", nil); err != nil {
+            http.Error(w, err.Error(), http.StatusInternalServerError)
+        }
+    })
+    
+    log.Println("Server running on http://localhost:8080")
+    log.Fatal(http.ListenAndServe(":8080", nil))
+}
+```
+
 ## API
 
 ### NewTemplateSet
@@ -223,6 +269,13 @@ Makes a new template set using the specified template as the layout.
 func (ts *TemplateSet) ParseDirs(dirs ...string) error
 ```
 Parses all HTML/templates files in the specified directories.
+
+### ParseFS
+
+```go
+func (ts *TemplateSet) ParseFS(filesystem fs.FS, roots ...string) error
+```
+Parses all HTML/template files in an embedded filesystem.
 
 ### Execute
 ```go
@@ -238,6 +291,19 @@ Renders a template in isolation, without using the layout. Useful for HTMX and A
 * **Note:** `ExecuteIsolated` does not separate CSS scope. Therefore, it is recommended that styles be declared globally.
 
 Although `ExecuteIsolated` load the template on demand, it uses caching so that if it needs to execute the template again, it is already in memory, thus optimizing performance.
+
+### ExecuteIsolatedFS
+```go
+func (ts *TemplateSet) ExecuteIsolatedFS(w io.Writer, filesystem fs.FS, fsPath string, data interface{}) error
+```
+Renders a template directly from an embedded filesystem, without using the configured layout.
+
+This method is similar to ExecuteIsolated, but works with embedded filesystems.
+
+It is ideal for use with 'HTMX', Ajax requests, or any scenario where only a single HTML fragment
+is required.
+
+The 'fsPath' parameter should be the path within the filesystem.
 
 ## Template Functions
 

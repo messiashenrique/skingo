@@ -205,11 +205,57 @@ Usando os componetes na Página principal e também componentes aninhados.
 </template>
 ```
 
-O Skingo vai de forma inteligente determinar os escopos de CSS e criar automaticamente classes que auxiliam na estilização de cada componente, respeitando os estilos específicos em primeiro lugar.
+O Skingo vai, de forma inteligente, determinar os escopos de CSS e criar automaticamente classes que auxiliam na estilização de cada componente, respeitando os estilos específicos em primeiro lugar.
 
 Se mais de um elemento sem pai (sem um contêiner) forem declarados entre as tags `<template><template>`, o Skingo criará de forma automática um cointêiner (`<div>`) para envolvê-los e assim separar inteligentemente os estilos entre os diversos componentes, respeitando cada escopo. 
 
 Para evitar esse comportamento acima, basta adicionar o atributo `unwrap` na tag "template", dessa forma: `<template unwrap>`.
+
+### Exemplo com Filesystem Embutido
+```go
+//main.go
+package main
+
+import (
+    "embed"
+    "log"
+    "net/http"
+    "github.com/messiashenrique/skingo"
+)
+
+//go:embed templates/**/*.html
+var templateFS embed.FS
+
+func main() {
+    // Cria um novo conjunto de templates com "layout" como o template de layout
+    ts := skingo.NewTemplateSet("layout")
+    
+    // Analisa os templates no filesystem embutido
+    if err := ts.ParseFS(templateFS, "templates/pages", "templates/components"); err != nil {
+        log.Fatalf("Error parsing templates: %v", err)
+    }
+    
+    // Handler para a página inicial
+    http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+        if err := ts.Execute(w, "home", map[string]interface{}{
+            "Title": "Home Page",
+            "Content": "Welcome to Skingo with embedded templates!",
+        }); err != nil {
+            http.Error(w, err.Error(), http.StatusInternalServerError)
+        }
+    })
+    
+    // Handler para requisições HTMX que precisam apenas de fragmentos
+    http.HandleFunc("/fragment", func(w http.ResponseWriter, r *http.Request) {
+        if err := ts.ExecuteIsolatedFS(w, templateFS, "templates/fragments/partial.html", nil); err != nil {
+            http.Error(w, err.Error(), http.StatusInternalServerError)
+        }
+    })
+    
+    log.Println("Servidor rodando em http://localhost:8080")
+    log.Fatal(http.ListenAndServe(":8080", nil))
+}
+```
 
 ## API
 
@@ -225,6 +271,12 @@ func (ts *TemplateSet) ParseDirs(dirs ...string) error
 ```
 Analisa todos os arquivos HTML/templates nos diretórios especificados.
 
+### ParseFS
+```go
+func (ts *TemplateSet) ParseFS(filesystem fs.FS, roots ...string) error
+```
+Analisa todos os arquivos HTML/template em um sistema de arquivos embutido (embedded filesystem).
+
 ### Execute
 ```go
 func (ts *TemplateSet) Execute(w io.Writer, name string, data interface{}) error
@@ -238,7 +290,19 @@ func (ts *TemplateSet) ExecuteIsolated(w io.Writer, filename string, data interf
 Renderiza um template de forma isolada, sem usar o layout. Útil para HTMX e requisições Ajax.
 * **Nota:** `ExecuteIsolated` não faz separação de escopo CSS. Portanto, o recomendado é que os estilos sejam declarados globalmente.
 
-Embora o `ExecuteIsolated` carregue o template sob demanda, ele usa o armazenamento em cache para, caso precise executar novamente o template, ele ja'esteja em memória, otimizando assim a performance.
+Embora o `ExecuteIsolated` carregue o template sob demanda, ele usa o armazenamento em cache para, caso precise executar novamente o template, ele já esteja em memória, otimizando assim a performance.
+
+### ExecuteIsolatedFS
+```go
+func (ts *TemplateSet) ExecuteIsolatedFS(w io.Writer, filesystem fs.FS, fsPath string, data interface{}) error
+```
+Renderiza um template diretamente de um sistema de arquivos embutido, sem usar o layout configurado.
+
+Este método é semelhante ao ExecuteIsolated, mas funciona com sistemas de arquivos embutidos.
+É ideal para uso com 'HTMX', requisições Ajax, ou qualquer cenário onde apenas um fragmento HTML
+é necessário.
+
+O parâmetro 'fsPath' deve ser o caminho dentro do sistema de arquivos.
 
 ## Funções de Template
 
