@@ -319,6 +319,10 @@ Skingo includes the following standard functions available in all templates:
 | `sub` | Subtracts two numbers | `{{sub 10 4}}` → `6` |
 | `mul` | Multiplies two numbers | `{{mul 3 5}}` → `15` |
 | `mod` | Returns the remainder of the division | `{{mod 10 3}}` → `1` |
+| `addFloat` | Adds two floating point numbers | `{{addFloat 3.0 3.1}}` → `6.1` |
+| `subFloat` | Subtract two floating point numbers | `{{subFloat 7.3 3.1}}` → `4.2` |
+| `mulFloat` | Multiplies two floating point numbers | `{{mulFloat 3.0 7.1}}` → `21.3` |
+| `divFloat` | Divides two floating point numbers | `{{divFloat 24.6 3.0}}` → `8.2` |
 | `comp` | Invokes a component passing parameters | `{{comp "card" "Black Card"}}` |
 | `dict` | Creates a key/value map | `{{comp "button" (dict "text" "Click")}}` |
 | `param` | Accesses a positional parameter | `{{param 0}}` |

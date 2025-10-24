@@ -318,6 +318,10 @@ O Skingo inclui as seguintes funções padrão disponíveis em todos os template
 | `sub` | Subtrai dois números | `{{sub 10 4}}` → `6` |
 | `mul` | Multiplica dois números | `{{mul 3 5}}` → `15` |
 | `mod` | Retorna o resto da divisão | `{{mod 10 3}}` → `1` |
+| `addFloat` | Soma dois número do tipo Float | `{{addFloat 3.0 3.1}}` → `6.1` |
+| `subFloat` | Subtrai dois número do tipo Float | `{{subFloat 7.3 3.1}}` → `4.2` |
+| `mulFloat` | Multiplica dois número do tipo Float | `{{mulFloat 3.0 7.1}}` → `21.3` |
+| `divFloat` | Divide dois número do tipo Float | `{{divFloat 24.6 3.0}}` → `8.2` |
 | `comp` | Invoca um componente passando parâmetros | `{{comp "card" "Black Card"}}` |
 | `dict` | Cria um mapa de chave/valor | `{{comp "button" (dict "text" "Clique")}}` |
 | `param` | Acessa um parâmetro posicional | `{{param 0}}` |

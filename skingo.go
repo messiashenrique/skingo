@@ -66,10 +66,14 @@ var (
 
 // defaultFuncs contains the default functions available in all templates
 var defaultFuncs = template.FuncMap{
-	"add": func(a, b int) int { return a + b },
-	"mod": func(a, b int) int { return a % b },
-	"mul": func(a, b int) int { return a * b },
-	"sub": func(a, b int) int { return a - b },
+	"add":      func(a, b int) int { return a + b },
+	"mod":      func(a, b int) int { return a % b },
+	"mul":      func(a, b int) int { return a * b },
+	"sub":      func(a, b int) int { return a - b },
+	"addFloat": func(a, b float64) float64 { return a + b },
+	"mulFloat": func(a, b float64) float64 { return a * b },
+	"subFloat": func(a, b float64) float64 { return a - b },
+	"divFloat": func(a, b float64) float64 { return a / b },
 	"toJson": func(v interface{}) string {
 		b, err := json.Marshal(v)
 		if err != nil {
