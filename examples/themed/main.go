@@ -41,32 +41,37 @@ func main() {
 		log.Fatalf("Error parsing templates: %v", err)
 	}
 
-	// Route for light theme
+	// Single route with query parameter for theme selection
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		uikit.SetGlobalTheme("light")
-		if err := ts.Execute(w, "home", map[string]interface{}{
-			"Title":       "Themed Components - Light Mode",
-			"Description": "This page demonstrates the light theme with component variants",
-			"Theme":       "light",
-		}); err != nil {
-			log.Printf("Error rendering light theme: %v", err)
+		// Read theme from query parameter, default to "light"
+		theme := r.URL.Query().Get("theme")
+		if theme != "dark" && theme != "light" {
+			theme = "light"
 		}
-	})
 
-	// Route for dark theme
-	http.HandleFunc("/dark", func(w http.ResponseWriter, r *http.Request) {
-		uikit.SetGlobalTheme("dark")
+		// Set the global theme
+		uikit.SetGlobalTheme(theme)
+
+		// Determine titles based on theme
+		title := "Themed Components - Light Mode"
+		description := "This page demonstrates the light theme with component variants"
+		if theme == "dark" {
+			title = "Themed Components - Dark Mode"
+			description = "This page demonstrates the dark theme with component variants"
+		}
+
 		if err := ts.Execute(w, "home", map[string]interface{}{
-			"Title":       "Themed Components - Dark Mode",
-			"Description": "This page demonstrates the dark theme with component variants",
-			"Theme":       "dark",
+			"Title":          title,
+			"Description":    description,
+			"Theme":          theme,
+			"ThemeVarsInput": theme, // Pass theme to template for client JS
 		}); err != nil {
-			log.Printf("Error rendering dark theme: %v", err)
+			log.Printf("Error rendering page: %v", err)
 		}
 	})
 
 	log.Println("Theme-aware server running on http://localhost:8080")
-	log.Println("  Light theme: http://localhost:8080")
-	log.Println("  Dark theme:  http://localhost:8080/dark")
+	log.Println("  Light theme: http://localhost:8080?theme=light")
+	log.Println("  Dark theme:  http://localhost:8080?theme=dark")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }

@@ -152,6 +152,31 @@
 		}
 	</style>
 	<script>
+		// Theme management with localStorage
+		(function () {
+			// Get the current theme from server (via query param or data attribute)
+			const urlParams = new URLSearchParams(window.location.search);
+			const currentTheme = urlParams.get('theme') || 'light';
+
+			// Get user preference from localStorage
+			const savedTheme = localStorage.getItem('theme');
+
+			// If no saved preference, save the current one
+			if (!savedTheme) {
+				localStorage.setItem('theme', currentTheme);
+			} else if (savedTheme !== currentTheme) {
+				// If preference differs from current URL, redirect to apply it
+				window.location.href = '/?theme=' + savedTheme;
+				return;
+			}
+
+			// Expose theme switching function for buttons
+			window.switchTheme = function (newTheme) {
+				localStorage.setItem('theme', newTheme);
+				window.location.href = '/?theme=' + newTheme;
+			};
+		})();
+
 		// Injetar CSS variables via JavaScript
 		const cssVars = `{{ themeVars }}`;
 		const style = document.createElement('style');
@@ -164,8 +189,8 @@
 	<nav class="nav">
 		<div class="nav-title">Skingo UI - Design Tokens</div>
 		<div class="nav-links">
-			<a href="/">Light Mode</a>
-			<a href="/dark">Dark Mode</a>
+			<a href="#" onclick="switchTheme('light'); return false;">Light Mode</a>
+			<a href="#" onclick="switchTheme('dark'); return false;">Dark Mode</a>
 		</div>
 	</nav>
 

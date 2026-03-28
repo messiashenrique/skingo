@@ -188,29 +188,29 @@ type InfoTokens struct {
 func LightTheme() *DesignTokens {
 	return &DesignTokens{
 		Colors: ColorTokens{
-			Primary:          "#3b82f6", // Blue
-			Secondary:        "#8b5cf6", // Purple
-			Success:          "#10b981", // Green
-			Warning:          "#f59e0b", // Amber
-			Error:            "#ef4444", // Red
-			Info:             "#06b6d4", // Cyan
+			Primary:          "#0f172a", // Slate-900 (shadcn-ui inspired)
+			Secondary:        "#334155", // Slate-700
+			Success:          "#059669", // Emerald-600
+			Warning:          "#d97706", // Amber-600
+			Error:            "#e11d48", // Rose-600
+			Info:             "#0284c7", // Sky-600
 			Background:       "#ffffff",
 			Surface:          "#f9fafb",
 			Border:           "#e5e7eb",
-			Text:             "#1f2937",
-			TextMuted:        "#6b7280",
-			PrimaryLight:     "#dbeafe",
-			SecondaryLight:   "#ede9fe",
-			SuccessLight:     "#d1fae5",
-			WarningLight:     "#fef3c7",
-			ErrorLight:       "#fee2e2",
-			InfoLight:        "#cffafe",
-			PrimaryOutline:   "#3b82f6",
-			SecondaryOutline: "#8b5cf6",
-			SuccessOutline:   "#10b981",
-			WarningOutline:   "#f59e0b",
-			ErrorOutline:     "#ef4444",
-			InfoOutline:      "#06b6d4",
+			Text:             "#0f172a",
+			TextMuted:        "#64748b",
+			PrimaryLight:     "#f1f5f9", // Slate-100
+			SecondaryLight:   "#cbd5e1", // Slate-200
+			SuccessLight:     "#d1fae5", // Emerald-100
+			WarningLight:     "#fed7aa", // Amber-100
+			ErrorLight:       "#ffe4e6", // Rose-100
+			InfoLight:        "#e0f2fe", // Sky-100
+			PrimaryOutline:   "#0f172a",
+			SecondaryOutline: "#334155",
+			SuccessOutline:   "#059669",
+			WarningOutline:   "#d97706",
+			ErrorOutline:     "#e11d48",
+			InfoOutline:      "#0284c7",
 		},
 		Spacing: SpacingTokens{
 			XS:  "0.25rem",
@@ -306,31 +306,31 @@ func LightTheme() *DesignTokens {
 // DarkTheme returns a dark mode theme tokens
 func DarkTheme() *DesignTokens {
 	tokens := LightTheme()
-	// Override colors for dark mode
+	// Override colors for dark mode (shadcn-ui inspired)
 	tokens.Colors = ColorTokens{
-		Primary:          "#60a5fa", // Lighter blue
-		Secondary:        "#a78bfa", // Lighter purple
-		Success:          "#34d399", // Lighter green
-		Warning:          "#fbbf24", // Lighter amber
-		Error:            "#f87171", // Lighter red
-		Info:             "#22d3ee", // Lighter cyan
-		Background:       "#0f172a", // Dark navy
-		Surface:          "#1e293b", // Dark slate
-		Border:           "#334155", // Dark gray
-		Text:             "#f1f5f9", // Light text
-		TextMuted:        "#cbd5e1", // Muted light text
-		PrimaryLight:     "#1e3a8a", // Dark blue
-		SecondaryLight:   "#4c1d95", // Dark purple
-		SuccessLight:     "#064e3b", // Dark green
-		WarningLight:     "#78350f", // Dark amber
-		ErrorLight:       "#7f1d1d", // Dark red
-		InfoLight:        "#0e7490", // Dark cyan
-		PrimaryOutline:   "#60a5fa",
-		SecondaryOutline: "#a78bfa",
-		SuccessOutline:   "#34d399",
-		WarningOutline:   "#fbbf24",
-		ErrorOutline:     "#f87171",
-		InfoOutline:      "#22d3ee",
+		Primary:          "#f1f5f9", // Slate-100
+		Secondary:        "#cbd5e1", // Slate-200
+		Success:          "#6ee7b7", // Emerald-400
+		Warning:          "#fcd34d", // Amber-300
+		Error:            "#fb7185", // Rose-400
+		Info:             "#38bdf8", // Sky-400
+		Background:       "#020617", // Slate-950
+		Surface:          "#0f172a", // Slate-900
+		Border:           "#1e293b", // Slate-800
+		Text:             "#f1f5f9", // Slate-100
+		TextMuted:        "#94a3b8", // Slate-400
+		PrimaryLight:     "#1e293b", // Slate-800
+		SecondaryLight:   "#334155", // Slate-700
+		SuccessLight:     "#064e3b", // Emerald-900
+		WarningLight:     "#78350f", // Amber-900
+		ErrorLight:       "#881337", // Rose-900
+		InfoLight:        "#0c4a6e", // Sky-900
+		PrimaryOutline:   "#e2e8f0",
+		SecondaryOutline: "#cbd5e1",
+		SuccessOutline:   "#6ee7b7",
+		WarningOutline:   "#fcd34d",
+		ErrorOutline:     "#fb7185",
+		InfoOutline:      "#38bdf8",
 	}
 	return tokens
 }

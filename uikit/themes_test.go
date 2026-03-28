@@ -41,7 +41,7 @@ func TestThemeManagerDarkTheme(t *testing.T) {
 	}
 
 	tokens := tm.GetTokens()
-	if tokens.Colors.Background != "#0f172a" {
+	if tokens.Colors.Background != "#020617" {
 		t.Errorf("Expected dark background, got %s", tokens.Colors.Background)
 	}
 }

@@ -957,7 +957,7 @@ func (ts *TemplateSet) processTemplate(name string, content []byte) error {
 // registerComponentHelpersInternal creates and registers template helper functions for all registered components.
 // These helpers provide a cleaner syntax for calling components than the generic 'comp' function.
 // For example, instead of {{ comp "button" (dict "label" "Click") }}, users can write {{ button "Click" }}.
-func (ts *TemplateSet) registerComponentHelpersInternal(internalFuncs template.FuncMap) {
+func (ts *TemplateSet) registerComponentHelpersInternal() {
 	// Get a snapshot of component names while locked
 	ts.mu.Lock()
 	componentNames := make([]string, 0, len(ts.componentMeta))
@@ -1055,7 +1055,7 @@ func (ts *TemplateSet) finalizeParsing() error {
 	ts.masterTmpl.Funcs(internalFuncs)
 
 	// Register component helpers (auto-generated wrapper functions)
-	ts.registerComponentHelpersInternal(internalFuncs)
+	ts.registerComponentHelpersInternal()
 
 	// Second pass: create the templates and allow references between them
 	for name, html := range ts.templateHTML {
