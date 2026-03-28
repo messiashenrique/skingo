@@ -1,0 +1,28 @@
+<template>
+  <section class="space-y-6">
+    <header class="space-y-2">
+      <h1 class="text-3xl font-bold">{{ .Title }}</h1>
+      <p class="text-slate-600">Componentes vindo de um pacote de catalogo externo com parse em multiplos filesystems.</p>
+    </header>
+
+    {{ SkInfo (dict 
+			"title" "Catalog loaded" 
+			"message" "UI components were parsed from uikit embed." 
+			"variant" "success"
+			) 
+		}}
+
+    <div class="flex items-center gap-3">
+      {{ SkButton "Primary" "primary" }}
+      {{ SkButton "Outline" "outline" }}
+      {{ SkBadge "Stable" "success" }}
+    </div>
+
+    <div class="grid gap-4 md:grid-cols-2">
+      {{ SkInput (dict "name" "email" "label" "Email" "placeholder" "you@example.com") }}
+      {{ SkInput (dict "name" "company" "label" "Company" "placeholder" "Acme Inc.") }}
+    </div>
+
+    {{ SkCard (dict "title" "Shipping Status" "content" "Your order is ready for dispatch and will be collected today." "actionLabel" "Track order") }}
+  </section>
+</template>
