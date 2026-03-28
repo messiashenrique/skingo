@@ -1,0 +1,12 @@
+<template>
+  {{$title := .title}}
+  {{$message := .message}}
+  {{$variant := .variant}}
+  {{if eq $variant ""}}{{$variant = "info"}}{{end}}
+  {{$variantClass := ""}}
+  {{if eq $variant "success"}}{{$variantClass = "border-emerald-200 bg-emerald-50 text-emerald-900"}}{{else if eq $variant "error"}}{{$variantClass = "border-rose-200 bg-rose-50 text-rose-900"}}{{else}}{{$variantClass = "border-sky-200 bg-sky-50 text-sky-900"}}{{end}}
+  <section class="rounded-lg border p-4 {{$variantClass}}">
+    <h3 class="text-sm font-semibold">{{$title}}</h3>
+    <p class="mt-1 text-sm opacity-90">{{$message}}</p>
+  </section>
+</template>

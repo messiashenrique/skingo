@@ -1,0 +1,9 @@
+<template>
+  {{$label := paramOr 0 .label}}
+  {{$variant := paramOr 1 (paramOr 2 .variant)}}
+  {{$variantClass := ""}}
+  {{if eq $variant "outline"}}{{$variantClass = "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}}{{else if eq $variant "ghost"}}{{$variantClass = "bg-transparent text-slate-700 hover:bg-slate-100"}}{{else}}{{$variantClass = "bg-slate-900 text-white hover:bg-slate-800"}}{{end}}
+  <button class="inline-flex items-center rounded-md px-4 py-2 text-sm font-semibold transition-colors {{$variantClass}}">
+    {{$label}}
+  </button>
+</template>

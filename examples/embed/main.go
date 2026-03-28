@@ -15,6 +15,15 @@ func main() {
 	// Makes a new TemplateSet with layout template
 	ts := skingo.NewTemplateSet("layout")
 
+	if err := ts.RegisterComponentCatalogFS("skingo-ui", templateFS, "components/catalog.json"); err != nil {
+		log.Fatalf("Error loading component catalog: %v", err)
+	}
+
+	ts.SetComponentValidation(skingo.ComponentValidationOptions{
+		Enabled:     true,
+		StrictTypes: true,
+	})
+
 	// Analyze the templates in the "templates" and "components" directories
 	// Use ParseFS instead of ParseDir
 	// if err := ts.ParseDirs("templates", "components"); err != nil {

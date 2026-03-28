@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Skingo Component Helpers</title>
+	<script src="https://cdn.tailwindcss.com"></script>
+	<style>
+		html {
+			scroll-behavior: smooth;
+		}
+	</style>
+</head>
+
+<body>
+	{{ template "home.html" . }}
+	<footer class="bg-slate-900 border-t border-slate-700 py-6 mt-12">
+		<div class="max-w-6xl mx-auto px-6 text-center text-slate-400 text-sm">
+			<p>Built with <a href="https://github.com/messiashenrique/skingo"
+					 class="text-blue-400 hover:text-blue-300">Skingo</a> • Component helpers example</p>
+		</div>
+	</footer>
+</body>
+
+</html>

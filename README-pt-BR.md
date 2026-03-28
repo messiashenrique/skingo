@@ -97,7 +97,9 @@ Não de esqueça de incluir na função `ParseDirs` o diretório onde está loca
 Skingo permite criar componentes reutilizáveis que encapsulam HTML, CSS e JavaScript.
 
 ### Definindo um componente
-Componente com parâmtros posicionais e 2º parâmetro opcional
+
+Componentes integram-se perfeitamente com templates. Aqui está um componente de botão que aproveita a sintaxe de helpers:
+
 ```html
 <!-- templates/button.html -->
 <template>
@@ -106,28 +108,23 @@ Componente com parâmtros posicionais e 2º parâmetro opcional
 
 <style>
   .btn {
-    margin: 0.5rem 0;
     padding: 0.5rem 1rem;
     color: white;
     border-radius: 0.25rem;
     border: none;
     cursor: pointer;
   }
-
   .blue {
     background-color: #3490dc;
   }
-  
   .green {
     background-color: #019001;
   }
 </style>
-
-<script>
-  console.log("Botão carregado!");
-</script>
 ```
-Componente com parâmetros nomeados
+
+E um componente de card que aninha outros componentes:
+
 ```html
 <!-- templates/card.html -->
 <template>
@@ -139,15 +136,19 @@ Componente com parâmetros nomeados
       <p>{{.content}}</p>
     </div>
     <div class="card-footer">
-      <!-- Using component with positional parameters -->
-      {{ comp "button.html" .buttonText }}
+      <!-- Usando helper para aninhar componente de botão -->
+      {{ button .buttonText }}
     </div>
   </div>
 </template>
 
 <style>
-  .card {
-    border: 0.0625rem solid #e2e8f0;
+  .card { border: 1px solid #e2e8f0; border-radius: 0.5rem; }
+  .card-header { background-color: #f7fafc; padding: 0.5rem; }
+  .card-body { padding: 0.5rem 1rem; }
+  .card-footer { background-color: #f7fafc; }
+</style>
+```
     border-radius: 0.5rem;
     overflow: hidden;
     margin-bottom: 1rem;
@@ -177,33 +178,37 @@ Componente com parâmetros nomeados
 </style>
 ```
 
-### Usando um componente
-Usando os componetes na Página principal e também componentes aninhados.
+### Usando um componente (Sintaxe com Helpers)
+
+Skingo gera automaticamente funções helpers para todos os componentes registrados, oferecendo uma sintaxe limpa e intuitiva:
+
 ```html
 <!-- templates/home.html -->
 <template>
   <div class="container">
     <h1>{{.Title}}</h1>
     <p>{{.Content}}</p>
-    
-    <!-- Usando componentes com parâmetros nomeados -->
-    {{ comp "card.html" (dict 
+
+    <!-- Usando helpers de componentes com parâmetros nomeados -->
+    {{ card (dict 
       "title" "Exemplo de Card" 
-      "content" "Este é um exemplo de um componente de card com um botão." 
+      "content" "Este é um exemplo de componente card com um botão." 
       "buttonText" "Ler mais"
     ) }}
     
-    {{ comp "card.html" (dict 
-      "title" "Outro Card" 
-      "content" "Os componentes podem ser facilmente reutilizados com diferentes conteúdos." 
-      "buttonText" "Saiba mais"
-    ) }}
-
-    <!-- Usando componente com parâmetros posicionais e 2º parâmtro opicional -->
-    {{ comp "button.html" "Clique-me!" "green" }}
+    <!-- Usando parâmetros posicionais -->
+    {{ button "Clique aqui!" "green" }}
   </div>
 </template>
 ```
+
+**Em vez de:** `{{ comp "card.html" (dict "title" "...") }}`  
+**Você pode escrever:** `{{ card (dict "title" "...") }}`
+
+Os helpers são gerados automaticamente com base em:
+- Nome do componente (derivado do nome do arquivo ou nome registrado)
+- Metadados do componente registrado
+- A função `comp` continua disponível como alternativa
 
 O Skingo vai, de forma inteligente, determinar os escopos de CSS e criar automaticamente classes que auxiliam na estilização de cada componente, respeitando os estilos específicos em primeiro lugar.
 
@@ -211,7 +216,55 @@ Se mais de um elemento sem pai (sem um contêiner) forem declarados entre as tag
 
 Para evitar esse comportamento acima, basta adicionar o atributo `unwrap` na tag "template", dessa forma: `<template unwrap>`.
 
-### Exemplo com Filesystem Embutido
+### Exemplo de Catálogo Híbrido
+
+Skingo inclui um catálogo de interface de usuário inicial reutilizável no pacote `uikit` com componentes pré-construídos:
+- `SkButton` - Botão estilizado com variantes (primary, outline, ghost)
+- `SkInput` - Input de formulário com suporte a label
+- `SkBadge` - Badge de status com variantes semânticas (success, warning, danger)
+- `SkInfo` - Caixa de alerta/informação com variantes (info, success, error)
+- `SkCard` - Card contêiner com header, conteúdo e ação opcional de rodapé
+
+**Exemplo de uso:**
+```go
+import (
+  "github.com/messiashenrique/skingo"
+  "github.com/messiashenrique/skingo/uikit"
+)
+
+func main() {
+  ts := skingo.NewTemplateSet("layout")
+  
+  // Registra o catálogo uikit
+  if err := uikit.RegisterCatalog(ts); err != nil {
+    log.Fatal(err)
+  }
+  
+  // Habilita validação opcional
+  ts.SetComponentValidation(skingo.ComponentValidationOptions{
+    Enabled:     true,
+    StrictTypes: true,
+  })
+  
+  // Analisa e usa
+  if err := ts.ParseDirs("templates"); err != nil {
+    log.Fatal(err)
+  }
+  
+  // Os helpers SkButton, SkInput, SkCard agora estão disponíveis em templates
+}
+```
+
+**Em templates:**
+```html
+{{ SkButton "Clique aqui" "primary" }}
+{{ SkInput (dict "name" "email" "label" "Email") }}
+{{ SkCard (dict "title" "Meu Card" "content" "Conteúdo aqui") }}
+{{ SkInfo (dict "title" "Informação" "message" "Olá!" "variant" "success") }}
+{{ SkBadge "Ativo" "success" }}
+```
+
+Ver exemplo de integração híbrida em `examples/hybrid`.
 ```go
 //main.go
 package main
@@ -257,33 +310,69 @@ func main() {
 }
 ```
 
-## API
+## Testes de Componentes
 
-### NewTemplateSet
+Skingo inclui APIs integradas para testar metadados de componentes e renderização:
+
 ```go
-func NewTemplateSet(layoutName string) *TemplateSet
-```
-Cria um novo conjunto de templates usando o template especificado como layout.
+func TestMetadadosComponente(t *testing.T) {
+    ts := skingo.NewTemplateSet("layout")
+    
+    // Registra um catálogo de componentes
+    if err := skingo.RegisterComponentCatalogJSON(ts, "meuscomponentes", []byte(`{
+        "components": {
+            "button": {
+                "description": "Botão clicável",
+                "variables": [
+                    {"name": "label", "type": "string", "required": true}
+                ]
+            }
+        }
+    }`)); err != nil {
+        t.Fatal(err)
+    }
+    
+    // Testa recuperação de metadados
+    meta, ok := ts.GetComponentMeta("button")
+    if !ok {
+        t.Fatal("Metadados do componente não encontrados")
+    }
+    
+    if meta.Description != "Botão clicável" {
+        t.Errorf("Esperado 'Botão clicável', obtive %s", meta.Description)
+    }
+}
 
-### ParseDirs
-```go
-func (ts *TemplateSet) ParseDirs(dirs ...string) error
+func TestValidacaoComponente(t *testing.T) {
+    ts := skingo.NewTemplateSet("layout")
+    
+    // Habilita validação
+    ts.SetComponentValidation(skingo.ComponentValidationOptions{
+        Enabled:     true,
+        StrictTypes: true,
+    })
+    
+    // A validação agora verifica parâmetros obrigatórios e tipos durante execução
+}
 ```
-Analisa todos os arquivos HTML/templates nos diretórios especificados.
 
-### ParseFS
-```go
-func (ts *TemplateSet) ParseFS(filesystem fs.FS, roots ...string) error
+Executar testes com ferramentas Go padrão:
+```bash
+go test ./...          # Executa todos os testes
+go test -v .           # Executa testes com saída verbosa
+go test -cover ./...   # Executa testes com relatório de cobertura
 ```
-Analisa todos os arquivos HTML/template em um sistema de arquivos embutido (embedded filesystem).
 
-### Execute
-```go
-func (ts *TemplateSet) Execute(w io.Writer, name string, data interface{}) error
-```
-Renderiza o template especificado usando o layout configurado.
+Ver `skingo_test.go` para exemplos abrangentes de testes:
+- Registro e recuperação de metadados de componentes
+- Análise de múltiplos filesystems com `ParseManyFS`
+- Opções de validação e verificação de tipos
+- Geração automática de funções helpers de componentes
 
-### ExecuteIsolated
+## Roadmap para Desenvolvimento
+
+| Etapa | Descrição | Prioridade | Status |
+|-------|-----------|------------|--------|
 ```go
 func (ts *TemplateSet) ExecuteIsolated(w io.Writer, filename string, data interface{}) error
 ```
@@ -303,6 +392,98 @@ Este método é semelhante ao ExecuteIsolated, mas funciona com sistemas de arqu
 é necessário.
 
 O parâmetro 'fsPath' deve ser o caminho dentro do sistema de arquivos.
+
+### Metadados de Catálogo de Componentes
+O Skingo agora possui APIs opcionais para registro de metadados de catálogos de componentes.
+Essas APIs não alteram o comportamento de renderização e servem de base para documentação, tooling e validação futura.
+
+```go
+func (ts *TemplateSet) RegisterComponentMeta(name string, meta ComponentMeta) error
+func (ts *TemplateSet) RegisterComponentCatalog(catalogName string, components map[string]ComponentMeta) error
+func (ts *TemplateSet) RegisterComponentCatalogJSON(catalogName string, manifest []byte) error
+func (ts *TemplateSet) RegisterComponentCatalogFile(catalogName string, filename string) error
+func (ts *TemplateSet) RegisterComponentCatalogFS(catalogName string, filesystem fs.FS, manifestPath string) error
+func (ts *TemplateSet) ListComponents() []ComponentInfo
+func (ts *TemplateSet) GetComponentMeta(name string) (ComponentMeta, bool)
+```
+
+Exemplo de manifesto JSON:
+
+```json
+{
+  "components": {
+    "button": {
+      "description": "Disparador de ação clicável",
+      "version": "1.0.0",
+      "variants": ["solid", "outline", "ghost"],
+      "dependencies": ["icon"],
+      "params": [
+        {
+          "name": "label",
+          "type": "string",
+          "required": true,
+          "description": "Rótulo do botão"
+        }
+      ]
+    }
+  }
+}
+```
+
+### Validação de Componentes (Opcional)
+Você pode habilitar validação em runtime das chamadas de componente com base nos metadados registrados.
+
+```go
+type ComponentValidationOptions struct {
+  Enabled     bool
+  StrictTypes bool
+}
+
+func (ts *TemplateSet) SetComponentValidation(options ComponentValidationOptions)
+func (ts *TemplateSet) EnableComponentValidation(enabled bool)
+func (ts *TemplateSet) GetComponentValidation() ComponentValidationOptions
+```
+
+Comportamento da validação:
+- `Enabled=false` (padrão): sem validação.
+- `Enabled=true`: valida parâmetros obrigatórios.
+- `StrictTypes=true` (padrão): valida tipos básicos declarados (`string`, `bool`, `int`, `float`, `number`, `[]string`, `[]map[string]string`, `map[string]interface{}`).
+- Se o componente tiver parâmetro `variant` e os metadados tiverem `variants`, o valor é validado contra as variantes permitidas.
+
+Exemplo:
+
+```go
+ts.SetComponentValidation(skingo.ComponentValidationOptions{
+  Enabled:     true,
+  StrictTypes: true,
+})
+```
+
+### Exemplo de Catálogo Híbrido
+O Skingo agora inclui um pacote inicial de catálogo UI reutilizável em `uikit` com componentes:
+- `SkButton`
+- `SkInput`
+- `SkBadge`
+- `SkInfo`
+- `SkCard`
+
+Veja o exemplo de integração híbrida em `examples/hybrid`.
+
+```go
+import (
+  "github.com/messiashenrique/skingo"
+  "github.com/messiashenrique/skingo/uikit"
+)
+
+ts := skingo.NewTemplateSet("layout")
+
+_ = uikit.RegisterCatalog(ts)
+
+err := ts.ParseManyFS(
+  skingo.ParseFSSource{Filesystem: appFS, Roots: []string{"templates"}},
+  uikit.Source(),
+)
+```
 
 ## Funções de Template
 
@@ -349,18 +530,18 @@ ts.AddFuncs(template.FuncMap{
 
 | Etapa | Descrição | Prioridade | Status |
 |-------|-----------|------------|--------|
-| **Testes** | Implementação de testes unitários abrangentes | Alta | 🔄 Em progresso |
+| **Testes** | Implementação de testes unitários abrangentes | Alta | ✅ Completo |
 | **Otimização de Performance** | Refatoração para melhorar a eficiência de renderização | Alta | 📅 Planejado |
 | **Documentação Completa** | Documentação detalhada com exemplos para cada funcionalidade | Alta | 🔄 Em progresso |
 | **Integração HTMX** | Suporte aprimorado para HTMX com helpers dedicados | Alta | 📅 Planejado |
+| **Variantes Temáticas** | Suporte a variantes de componentes com light/dark/custom themes | Alta | 📅 Planejado |
+| **Tokens de Design** | Sistema centralizado de tokens de design para componentes uikit | Alta | 📅 Planejado |
 | **Exemplos Avançados** | Repositório com exemplos mais complexos e casos de uso reais | Média | 📅 Planejado |
 | **Hot Reload** | Suporte para hot reload durante o desenvolvimento | Média | 🔮 Considerando |
-| **Validação de Parâmetros** | Sistema de validação de parâmetros para componentes | Média | 📅 Planejado |
 | **Benchmarks** | Comparativo de performance com outras soluções | Média | 📅 Planejado |
 | **Minificação CSS/JS** | Minificação automática de CSS e JS em produção | Média | 📅 Planejado |
 | **Extensões para Ferramentas** | Plugins para IDEs e integrações com ferramentas de desenvolvimento | Baixa | 🔮 Considerando |
 | **Server Side Rendering** | Implementação de SSR otimizado para SPAs | Baixa | 🔮 Considerando |
-| **Design System Integrado** | Componentes base para facilitar a criação de interfaces consistentes | Baixa | 🔮 Considerando |
 
 ### Legenda
 - 🔄 Em progresso: Desenvolvimento iniciado

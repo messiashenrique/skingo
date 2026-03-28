@@ -1,0 +1,66 @@
+{
+  "components": {
+    "button": {
+      "description": "Reusable action trigger (legacy example component)",
+      "version": "0.1.0",
+      "variants": [
+        "blue",
+        "green"
+      ],
+      "params": [
+        {
+          "name": "label",
+          "type": "string",
+          "required": true,
+          "description": "Button label"
+        },
+        {
+          "name": "variant",
+          "type": "string",
+          "required": false,
+          "default": "blue",
+          "description": "Visual variant"
+        }
+      ]
+    }
+    "card": {
+      "description": "Container with header and content",
+      "version": "0.1.0",
+      "dependencies": [
+        "button"
+      ],
+      "params": [
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "description": "Card title"
+        },
+        {
+          "name": "content",
+          "type": "string",
+          "required": true,
+          "description": "Card body text"
+        }
+      ]
+    },
+    "navbar": {
+      "description": "Simple top navigation",
+      "version": "0.1.0",
+      "params": [
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "description": "Navbar title"
+        },
+        {
+          "name": "items",
+          "type": "any",
+          "required": false,
+          "description": "Navigation items (flexible type)"
+        }
+      ]
+    }
+  }
+}

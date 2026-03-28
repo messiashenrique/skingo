@@ -1,0 +1,133 @@
+{
+  "components": {
+    "SkButton": {
+      "description": "Button with style variants",
+      "version": "0.1.0",
+      "variants": [
+        "primary",
+        "outline",
+        "ghost"
+      ],
+      "params": [
+        {
+          "name": "label",
+          "type": "string",
+          "required": true,
+          "description": "Button label"
+        },
+        {
+          "name": "variant",
+          "type": "string",
+          "required": false,
+          "default": "primary",
+          "description": "Visual variant"
+        }
+      ]
+    },
+    "SkInput": {
+      "description": "Text input with label",
+      "version": "0.1.0",
+      "params": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "description": "Input name"
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "required": false,
+          "description": "Input label"
+        },
+        {
+          "name": "placeholder",
+          "type": "string",
+          "required": false,
+          "description": "Placeholder text"
+        }
+      ]
+    },
+    "SkBadge": {
+      "description": "Small status badge",
+      "version": "0.1.0",
+      "variants": [
+        "default",
+        "success",
+        "warning"
+      ],
+      "params": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "description": "Badge text"
+        },
+        {
+          "name": "variant",
+          "type": "string",
+          "required": false,
+          "default": "default",
+          "description": "Badge variant"
+        }
+      ]
+    },
+    "SkInfo": {
+      "description": "Alert box with semantic variants",
+      "version": "0.1.0",
+      "variants": [
+        "info",
+        "success",
+        "error"
+      ],
+      "params": [
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "description": "Alert title"
+        },
+        {
+          "name": "message",
+          "type": "string",
+          "required": true,
+          "description": "Alert message"
+        },
+        {
+          "name": "variant",
+          "type": "string",
+          "required": false,
+          "default": "info",
+          "description": "Alert variant"
+        }
+      ]
+    },
+    "SkCard": {
+      "description": "Content card with optional action button",
+      "version": "0.1.0",
+      "dependencies": [
+        "SkButton"
+      ],
+      "params": [
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "description": "Card title"
+        },
+        {
+          "name": "content",
+          "type": "string",
+          "required": true,
+          "description": "Card content"
+        },
+        {
+          "name": "actionLabel",
+          "type": "string",
+          "required": false,
+          "description": "Action button label"
+        }
+      ]
+    }
+  }
+}

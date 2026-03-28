@@ -125,7 +125,35 @@ Component with positional parameters and optional 2nd parameter
   console.log("Loaded button!");
 </script>
 ```
-Component with named parameters
+### Writing Components
+
+Components integrate seamlessly with templates. Here's a button component that leverages helper syntax:
+
+```html
+<!-- templates/button.html -->
+<template>
+  <button class="btn {{ paramOr 1 "blue"}}">{{ param 0 }}</button>
+</template>
+
+<style>
+  .btn {
+    padding: 0.5rem 1rem;
+    color: white;
+    border-radius: 0.25rem;
+    border: none;
+    cursor: pointer;
+  }
+  .blue {
+    background-color: #3490dc;
+  }
+  .green {
+    background-color: #019001;
+  }
+</style>
+```
+
+And a card component that nests other components:
+
 ```html
 <!-- templates/card.html -->
 <template>
@@ -137,72 +165,51 @@ Component with named parameters
       <p>{{.content}}</p>
     </div>
     <div class="card-footer">
-      <!-- Using component with positional parameters -->
-      {{ comp "button.html" .buttonText }}
+      <!-- Using helper to nest button component -->
+      {{ button .buttonText }}
     </div>
   </div>
 </template>
 
 <style>
-  .card {
-    border: 0.0625rem solid #e2e8f0;
-    border-radius: 0.5rem;
-    overflow: hidden;
-    margin-bottom: 1rem;
-    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.1);
-  }
-
-  .card-header {
-    background-color: #f7fafc;
-    padding: 0.5rem;
-    border-bottom: 0.0625rem solid #e2e8f0;
-  }
-
-  .card-header h3 {
-    margin: 0;
-    font-size: 1.25rem;
-  }
-
-  .card-body {
-    padding: 0.5rem 1rem;
-  }
-
-  .card-footer {
-    padding: 0.25rem;
-    background-color: #f7fafc;
-    border-top: 0.0625rem solid #e2e8f0;
-  }
+  .card { border: 1px solid #e2e8f0; border-radius: 0.5rem; }
+  .card-header { background-color: #f7fafc; padding: 0.5rem; }
+  .card-body { padding: 0.5rem 1rem; }
+  .card-footer { background-color: #f7fafc; }
 </style>
 ```
 
-### Using a component
+### Using a component (Helper Syntax)
+
+Skingo automatically generates helper functions for all registered components, providing a clean and intuitive syntax:
+
 ```html
-Using the components on the Home Page and also nested components.
 <!-- templates/home.html -->
 <template>
   <div class="container">
     <h1>{{.Title}}</h1>
     <p>{{.Content}}</p>
 
-    <!-- Using components with named parameters -->
-    {{ comp "card.html" (dict 
+    <!-- Using component helpers with named parameters -->
+    {{ card (dict 
       "title" "Card Example" 
       "content" "This is an example of a card component with a button." 
       "buttonText" "Read more"
     ) }}
     
-    {{ comp "card.html" (dict 
-      "title" "Other Card" 
-      "content" "Components can be easily reused with different content." 
-      "buttonText" "Find out more"
-    ) }}
-    
-    <!-- Using component with positional parameters and optional 2nd parameter -->
-    {{ comp "button.html" "Click me!" "green" }}
-    
+    <!-- Using positional parameters -->
+    {{ button "Click me!" "green" }}
   </div>
 </template>
 ```
+
+**Instead of:** `{{ comp "card.html" (dict "title" "...") }}`  
+**You can now write:** `{{ card (dict "title" "...") }}`
+
+Helper functions are automatically generated based on:
+- Component name (derived from template filename or registered component name)
+- Registered component metadata
+- The `comp` function is still available as a fallback
 
 Skingo will intelligently determine the CSS scopes and automatically create classes that help in styling each component, respecting first the specific styles.
 
@@ -277,6 +284,21 @@ func (ts *TemplateSet) ParseFS(filesystem fs.FS, roots ...string) error
 ```
 Parses all HTML/template files in an embedded filesystem.
 
+### ParseManyFS
+
+```go
+type ParseFSSource struct {
+  Filesystem fs.FS
+  Roots      []string
+}
+
+func (ts *TemplateSet) ParseManyFS(sources ...ParseFSSource) error
+```
+
+Parses templates from multiple filesystems in one pass. This is useful for hybrid setups where your app templates and a component catalog are embedded in different packages.
+
+At least one source must provide the configured layout template.
+
 ### Execute
 ```go
 func (ts *TemplateSet) Execute(w io.Writer, name string, data interface{}) error
@@ -304,6 +326,135 @@ It is ideal for use with 'HTMX', Ajax requests, or any scenario where only a sin
 is required.
 
 The 'fsPath' parameter should be the path within the filesystem.
+
+### Component Catalog Metadata
+Skingo now provides optional catalog metadata registration APIs as a foundation for reusable UI packs.
+These APIs do not change rendering behavior and are useful for docs, tooling and future validation.
+
+```go
+func (ts *TemplateSet) RegisterComponentMeta(name string, meta ComponentMeta) error
+func (ts *TemplateSet) RegisterComponentCatalog(catalogName string, components map[string]ComponentMeta) error
+func (ts *TemplateSet) RegisterComponentCatalogJSON(catalogName string, manifest []byte) error
+func (ts *TemplateSet) RegisterComponentCatalogFile(catalogName string, filename string) error
+func (ts *TemplateSet) RegisterComponentCatalogFS(catalogName string, filesystem fs.FS, manifestPath string) error
+func (ts *TemplateSet) ListComponents() []ComponentInfo
+func (ts *TemplateSet) GetComponentMeta(name string) (ComponentMeta, bool)
+```
+
+JSON manifest format example:
+
+```json
+{
+  "components": {
+    "button": {
+      "description": "Clickable action trigger",
+      "version": "1.0.0",
+      "variants": ["solid", "outline", "ghost"],
+      "dependencies": ["icon"],
+      "params": [
+        {
+          "name": "label",
+          "type": "string",
+          "required": true,
+          "description": "Button label"
+        }
+      ]
+    }
+  }
+}
+```
+
+### Component Validation (Optional)
+You can enable runtime validation for component calls based on registered metadata.
+
+```go
+type ComponentValidationOptions struct {
+  Enabled     bool
+  StrictTypes bool
+}
+
+func (ts *TemplateSet) SetComponentValidation(options ComponentValidationOptions)
+func (ts *TemplateSet) EnableComponentValidation(enabled bool)
+func (ts *TemplateSet) GetComponentValidation() ComponentValidationOptions
+```
+
+Validation behavior:
+- `Enabled=false` (default): no validation.
+- `Enabled=true`: validates required params.
+- `StrictTypes=true` (default): validates basic declared types (`string`, `bool`, `int`, `float`, `number`, `[]string`, `[]map[string]string`, `map[string]interface{}`).
+- If the component has a `variant` param and metadata includes `variants`, the value is validated against allowed variants.
+
+Example:
+
+```go
+ts.SetComponentValidation(skingo.ComponentValidationOptions{
+  Enabled:     true,
+  StrictTypes: true,
+})
+```
+
+### Hybrid Catalog Example
+
+Skingo includes an initial reusable UI catalog package in `uikit` with pre-built components:
+- `SkButton` - Styled button with variants (primary, outline, ghost)
+- `SkInput` - Form input with label support
+- `SkBadge` - Status badge with semantic variants (success, warning, danger)
+- `SkInfo` - Alert/info box with variants (info, success, error)
+- `SkCard` - Container card with header, content, and optional footer action
+
+**Example usage:**
+```go
+import (
+  "github.com/messiashenrique/skingo"
+  "github.com/messiashenrique/skingo/uikit"
+)
+
+func main() {
+  ts := skingo.NewTemplateSet("layout")
+  
+  // Register the uikit catalog
+  if err := uikit.RegisterCatalog(ts); err != nil {
+    log.Fatal(err)
+  }
+  
+  // Enable optional validation
+  ts.SetComponentValidation(skingo.ComponentValidationOptions{
+    Enabled:     true,
+    StrictTypes: true,
+  })
+  
+  // Parse and use
+  if err := ts.ParseDirs("templates"); err != nil {
+    log.Fatal(err)
+  }
+  
+  // SkButton, SkInput, SkCard helpers are now available in templates
+}
+```
+
+**In templates:**
+```html
+{{ SkButton "Click me" "primary" }}
+{{ SkInput (dict "name" "email" "label" "Email") }}
+{{ SkCard (dict "title" "My Card" "content" "Content here") }}
+{{ SkInfo (dict "title" "Info" "message" "Hello!" "variant" "success") }}
+{{ SkBadge "Active" "success" }}
+```
+
+See the hybrid integration example in `examples/hybrid`.
+  "github.com/messiashenrique/skingo"
+  "github.com/messiashenrique/skingo/uikit"
+)
+
+ts := skingo.NewTemplateSet("layout")
+
+_ = uikit.RegisterCatalog(ts)
+
+err := ts.ParseManyFS(
+  skingo.ParseFSSource{Filesystem: appFS, Roots: []string{"templates"}},
+  uikit.Source(),
+)
+```
 
 ## Template Functions
 
@@ -346,22 +497,82 @@ ts.AddFuncs(template.FuncMap{
 ```
 * **Note**: This method should be called before `ParseDirs`.
 
+## Component Testing
+
+Skingo includes built-in APIs for testing component metadata and rendering:
+
+```go
+func TestComponentMetadata(t *testing.T) {
+    ts := skingo.NewTemplateSet("layout")
+    
+    // Register a component catalog
+    if err := skingo.RegisterComponentCatalogJSON(ts, "mycomponents", []byte(`{
+        "components": {
+            "button": {
+                "description": "Clickable button",
+                "variables": [
+                    {"name": "label", "type": "string", "required": true}
+                ]
+            }
+        }
+    }`)); err != nil {
+        t.Fatal(err)
+    }
+    
+    // Test metadata retrieval
+    meta, ok := ts.GetComponentMeta("button")
+    if !ok {
+        t.Fatal("Component metadata not found")
+    }
+    
+    if meta.Description != "Clickable button" {
+        t.Errorf("Expected 'Clickable button', got %s", meta.Description)
+    }
+}
+
+func TestComponentValidation(t *testing.T) {
+    ts := skingo.NewTemplateSet("layout")
+    
+    // Enable validation
+    ts.SetComponentValidation(skingo.ComponentValidationOptions{
+        Enabled:     true,
+        StrictTypes: true,
+    })
+    
+    // Validation will now check required params and types during component execution
+}
+```
+
+Run tests with standard Go tooling:
+```bash
+go test ./...          # Run all tests
+go test -v .           # Run tests in current package with verbose output
+go test -cover ./...   # Run tests with coverage report
+```
+
+See `skingo_test.go` for comprehensive examples of testing:
+- Component metadata registration and retrieval
+- Multi-filesystem catalog parsing with `ParseManyFS`
+- Validation options and type checking
+- Component helper function generation
+
 ## Roadmap for Development
 
 | Stage | Description | Priority | Status |
 |-------|-----------|------------|--------|
-| **Tests** | Implementation of comprehensive unit tests | High | 🔄 In progress |
+| **Tests** | Implementation of comprehensive unit tests | High | ✅ Complete |
 | **Performance Optimization** | Refactoring to improve rendering efficiency | High | 📅 Planned |
 | **Full Documentation** | Detailed documentation with examples for each feature | High | 🔄 In progress |
 | **HTMX Integration** | Improved support for HTMX with dedicated helpers | High | 📅 Planned |
+| **Themed Variants** | Component variants with light/dark/custom theme support | High | 📅 Planned |
+| **Design Tokens** | Centralized design token system for uikit components | High | 📅 Planned |
 | **Advanced Examples** | Repository with more complex examples and real use cases | Medium | 📅 Planned |
 | **Hot Reload** | Support for hot reload during development | Medium | 🔮 Considering |
-| **Parameter Validation** | Parameter validation system for components | Medium | 📅 Planned |
 | **Benchmarks** | Performance comparison with other solutions | Medium | 📅 Planned |
 | **CSS/JS Minification** | Automatic minification of CSS and JS in production | Medium | 📅 Planned |
 | **Extensions for Tools** | Plugins for IDEs and integrations with development tools | Low | 🔮 Considering |
 | **Server Side Rendering** | Implementation of SSR optimized for SPAs | Low | 🔮 Considering |
-| **Integrated Design System** | Base components to facilitate the creation of consistent interfaces | Low | 🔮 Considering |
+
 
 ### Caption
 - 🔄 **In progress**: Development has started

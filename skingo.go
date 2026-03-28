@@ -9,7 +9,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -32,6 +34,50 @@ type Layout struct {
 	tmpl *template.Template
 }
 
+// ComponentParam defines a component input expected by a component catalog.
+type ComponentParam struct {
+	Name        string      `json:"name"`
+	Type        string      `json:"type,omitempty"`
+	Required    bool        `json:"required,omitempty"`
+	Default     interface{} `json:"default,omitempty"`
+	Description string      `json:"description,omitempty"`
+}
+
+// ComponentMeta defines metadata for a reusable UI component.
+type ComponentMeta struct {
+	Name         string           `json:"name"`
+	Description  string           `json:"description,omitempty"`
+	Version      string           `json:"version,omitempty"`
+	Variants     []string         `json:"variants,omitempty"`
+	Dependencies []string         `json:"dependencies,omitempty"`
+	Params       []ComponentParam `json:"params,omitempty"`
+}
+
+// ComponentInfo is a read-only projection of registered components.
+type ComponentInfo struct {
+	Name        string
+	Catalog     string
+	Description string
+	Version     string
+}
+
+// ComponentValidationOptions configures optional component call validation.
+type ComponentValidationOptions struct {
+	Enabled     bool
+	StrictTypes bool
+}
+
+type componentManifest struct {
+	Components map[string]ComponentMeta `json:"components"`
+}
+
+// ParseFSSource groups one filesystem with one or more roots.
+// It is used by ParseManyFS to parse templates from multiple filesystems.
+type ParseFSSource struct {
+	Filesystem fs.FS
+	Roots      []string
+}
+
 // TemplateSet represents a set of templates
 type TemplateSet struct {
 	templates     map[string]*Template
@@ -44,6 +90,17 @@ type TemplateSet struct {
 	customFuncs   template.FuncMap              // Stores custom functions
 	isolatedCache map[string]*template.Template // Cache of isolated templates
 	cacheMu       sync.RWMutex                  // Specific mutex for cache
+	componentMeta map[string]ComponentMeta      // Component metadata indexed by name
+	componentSrc  map[string]string             // Catalog/source per component name
+	validation    ComponentValidationOptions
+	compStack     []compCall // Stack for tracking component call context
+	compMu        sync.Mutex // Mutex for protecting component call stack
+}
+
+// compCall represents a component call context on the call stack
+type compCall struct {
+	Args []interface{}
+	Name string
 }
 
 const (
@@ -98,12 +155,474 @@ func NewTemplateSet(layoutName string) *TemplateSet {
 		usedTemplates: make(map[string]bool),
 		customFuncs:   make(template.FuncMap),
 		isolatedCache: make(map[string]*template.Template),
+		componentMeta: make(map[string]ComponentMeta),
+		componentSrc:  make(map[string]string),
+		validation: ComponentValidationOptions{
+			Enabled:     false,
+			StrictTypes: true,
+		},
 	}
 
 	// Apply default functions immediately
 	ts.masterTmpl.Funcs(defaultFuncs)
 
 	return ts
+}
+
+func normalizeTemplateName(name string) string {
+	normalized := strings.TrimSpace(name)
+	normalized = strings.TrimSuffix(normalized, filepath.Ext(normalized))
+	return normalized
+}
+
+func normalizeDependencies(dependencies []string) []string {
+	if len(dependencies) == 0 {
+		return nil
+	}
+
+	normalized := make([]string, 0, len(dependencies))
+	for _, dep := range dependencies {
+		depName := normalizeTemplateName(dep)
+		if depName == "" {
+			continue
+		}
+		normalized = append(normalized, depName)
+	}
+
+	return normalized
+}
+
+func isNilValue(v interface{}) bool {
+	if v == nil {
+		return true
+	}
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Ptr, reflect.Slice, reflect.Map, reflect.Interface, reflect.Func:
+		return rv.IsNil()
+	default:
+		return false
+	}
+}
+
+func isStringLike(value interface{}) bool {
+	_, ok := value.(string)
+	return ok
+}
+
+func isBoolLike(value interface{}) bool {
+	_, ok := value.(bool)
+	return ok
+}
+
+func isIntLike(value interface{}) bool {
+	kind := reflect.ValueOf(value).Kind()
+	return kind >= reflect.Int && kind <= reflect.Int64
+}
+
+func isUintLike(value interface{}) bool {
+	kind := reflect.ValueOf(value).Kind()
+	return kind >= reflect.Uint && kind <= reflect.Uint64
+}
+
+func isFloatLike(value interface{}) bool {
+	kind := reflect.ValueOf(value).Kind()
+	return kind == reflect.Float32 || kind == reflect.Float64
+}
+
+func isNumberLike(value interface{}) bool {
+	return isIntLike(value) || isUintLike(value) || isFloatLike(value)
+}
+
+func isMapStringString(value interface{}) bool {
+	v := reflect.ValueOf(value)
+	if v.Kind() != reflect.Map {
+		return false
+	}
+	if v.Type().Key().Kind() != reflect.String {
+		return false
+	}
+	if v.Type().Elem().Kind() != reflect.String {
+		return false
+	}
+	return true
+}
+
+func isMapStringAny(value interface{}) bool {
+	v := reflect.ValueOf(value)
+	if v.Kind() != reflect.Map {
+		return false
+	}
+	if v.Type().Key().Kind() != reflect.String {
+		return false
+	}
+	return true
+}
+
+func isSliceString(value interface{}) bool {
+	v := reflect.ValueOf(value)
+	if v.Kind() != reflect.Slice && v.Kind() != reflect.Array {
+		return false
+	}
+
+	for i := 0; i < v.Len(); i++ {
+		if v.Index(i).Kind() != reflect.String {
+			return false
+		}
+	}
+
+	return true
+}
+
+func isSliceMapStringString(value interface{}) bool {
+	v := reflect.ValueOf(value)
+	if v.Kind() != reflect.Slice && v.Kind() != reflect.Array {
+		return false
+	}
+
+	for i := 0; i < v.Len(); i++ {
+		if !isMapStringString(v.Index(i).Interface()) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func matchesComponentParamType(value interface{}, expectedType string) bool {
+	expected := strings.ToLower(strings.TrimSpace(expectedType))
+	if expected == "" || expected == "any" || expected == "interface{}" {
+		return true
+	}
+
+	if isNilValue(value) {
+		return false
+	}
+
+	switch expected {
+	case "string":
+		return isStringLike(value)
+	case "bool", "boolean":
+		return isBoolLike(value)
+	case "int":
+		return isIntLike(value)
+	case "uint":
+		return isUintLike(value)
+	case "float", "float64", "float32":
+		return isFloatLike(value)
+	case "number":
+		return isNumberLike(value)
+	case "[]string", "slice[string]":
+		return isSliceString(value)
+	case "[]map[string]string", "slice[map[string]string]":
+		return isSliceMapStringString(value)
+	case "map[string]interface{}", "map[string]any", "map":
+		return isMapStringAny(value)
+	default:
+		// Unknown type declaration should not block rendering.
+		return true
+	}
+}
+
+func buildComponentValidationInput(args []interface{}, meta ComponentMeta) map[string]interface{} {
+	input := make(map[string]interface{})
+
+	if len(args) == 1 {
+		if mapData, ok := args[0].(map[string]interface{}); ok {
+			for key, value := range mapData {
+				input[key] = value
+			}
+		} else {
+			input["0"] = args[0]
+		}
+	} else {
+		for i, arg := range args {
+			input[fmt.Sprintf("%d", i)] = arg
+		}
+	}
+
+	for i, param := range meta.Params {
+		if i >= len(args) {
+			break
+		}
+		if param.Name == "" {
+			continue
+		}
+		if _, exists := input[param.Name]; !exists {
+			input[param.Name] = args[i]
+		}
+	}
+
+	return input
+}
+
+func (ts *TemplateSet) validateComponentCall(name string, args []interface{}) error {
+	ts.mu.Lock()
+	options := ts.validation
+	meta, hasMeta := ts.componentMeta[name]
+	ts.mu.Unlock()
+
+	if !options.Enabled || !hasMeta || len(meta.Params) == 0 {
+		return nil
+	}
+
+	input := buildComponentValidationInput(args, meta)
+
+	for i, param := range meta.Params {
+		paramKey := strings.TrimSpace(param.Name)
+		if paramKey == "" {
+			paramKey = fmt.Sprintf("%d", i)
+		}
+
+		value, exists := input[paramKey]
+		if !exists || isNilValue(value) {
+			if param.Required {
+				return fmt.Errorf("component %s: missing required param %q", name, paramKey)
+			}
+			continue
+		}
+
+		if options.StrictTypes && param.Type != "" && !matchesComponentParamType(value, param.Type) {
+			return fmt.Errorf("component %s: invalid type for param %q (expected %s, got %T)", name, paramKey, param.Type, value)
+		}
+
+		if strings.EqualFold(paramKey, "variant") && len(meta.Variants) > 0 {
+			variantValue, ok := value.(string)
+			if !ok {
+				return fmt.Errorf("component %s: param %q must be string to validate variants", name, paramKey)
+			}
+			valid := false
+			for _, variant := range meta.Variants {
+				if variant == variantValue {
+					valid = true
+					break
+				}
+			}
+			if !valid {
+				return fmt.Errorf("component %s: invalid variant %q (allowed: %s)", name, variantValue, strings.Join(meta.Variants, ", "))
+			}
+		}
+	}
+
+	return nil
+}
+
+// execComponent executes a component template with the given arguments.
+// This is the core implementation used by both the 'comp' template function
+// and the auto-generated component helper functions.
+func (ts *TemplateSet) execComponent(templateName string, args ...interface{}) (template.HTML, error) {
+	name := strings.TrimSuffix(templateName, ".html")
+
+	if err := ts.validateComponentCall(name, args); err != nil {
+		return "", err
+	}
+
+	ts.mu.Lock()
+	ts.usedTemplates[name] = true
+	ts.mu.Unlock()
+
+	ts.compMu.Lock()
+	ts.compStack = append(ts.compStack, compCall{
+		Args: args,
+		Name: name,
+	})
+	ts.compMu.Unlock()
+
+	// Ensures stack removal when finished
+	defer func() {
+		ts.compMu.Lock()
+		if len(ts.compStack) > 0 {
+			ts.compStack = ts.compStack[:len(ts.compStack)-1]
+		}
+		ts.compMu.Unlock()
+	}()
+
+	var buf strings.Builder
+	var data interface{}
+
+	if len(args) == 1 {
+		if mapData, ok := args[0].(map[string]interface{}); ok {
+			data = mapData
+		} else {
+			data = map[string]interface{}{
+				"0": args[0],
+			}
+		}
+	} else {
+		dataMap := make(map[string]interface{})
+		for i, arg := range args {
+			dataMap[fmt.Sprintf("%d", i)] = arg
+		}
+		data = dataMap
+	}
+
+	tmplName := name
+	if !strings.HasSuffix(tmplName, ".html") {
+		tmplName = tmplName + ".html"
+	}
+
+	if err := ts.masterTmpl.ExecuteTemplate(&buf, tmplName, data); err != nil {
+		return "", err
+	}
+
+	return template.HTML(buf.String()), nil
+}
+
+// SetComponentValidation configures optional validation for component calls.
+func (ts *TemplateSet) SetComponentValidation(options ComponentValidationOptions) {
+	ts.mu.Lock()
+	ts.validation = options
+	ts.mu.Unlock()
+}
+
+// EnableComponentValidation enables or disables component validation.
+// Strict type checking keeps its existing value.
+func (ts *TemplateSet) EnableComponentValidation(enabled bool) {
+	ts.mu.Lock()
+	ts.validation.Enabled = enabled
+	ts.mu.Unlock()
+}
+
+// GetComponentValidation returns current validation options.
+func (ts *TemplateSet) GetComponentValidation() ComponentValidationOptions {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	return ts.validation
+}
+
+// RegisterComponentMeta registers metadata for a single component.
+// It is optional and does not affect rendering behavior.
+func (ts *TemplateSet) RegisterComponentMeta(name string, meta ComponentMeta) error {
+	normalizedName := normalizeTemplateName(name)
+	if normalizedName == "" {
+		return fmt.Errorf("component name cannot be empty")
+	}
+
+	if meta.Name == "" {
+		meta.Name = normalizedName
+	} else {
+		meta.Name = normalizeTemplateName(meta.Name)
+	}
+
+	meta.Dependencies = normalizeDependencies(meta.Dependencies)
+
+	ts.mu.Lock()
+	ts.componentMeta[normalizedName] = meta
+	if _, exists := ts.componentSrc[normalizedName]; !exists {
+		ts.componentSrc[normalizedName] = "manual"
+	}
+	ts.mu.Unlock()
+
+	return nil
+}
+
+// RegisterComponentCatalog registers metadata for multiple components under a catalog name.
+// Catalog metadata is optional and can be used by docs, tooling and validation layers.
+func (ts *TemplateSet) RegisterComponentCatalog(catalogName string, components map[string]ComponentMeta) error {
+	catalog := strings.TrimSpace(catalogName)
+	if catalog == "" {
+		return fmt.Errorf("catalog name cannot be empty")
+	}
+	if len(components) == 0 {
+		return fmt.Errorf("catalog %s has no components", catalog)
+	}
+
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	for name, meta := range components {
+		normalizedName := normalizeTemplateName(name)
+		if normalizedName == "" {
+			return fmt.Errorf("catalog %s has component with empty name", catalog)
+		}
+
+		if meta.Name == "" {
+			meta.Name = normalizedName
+		} else {
+			meta.Name = normalizeTemplateName(meta.Name)
+		}
+		meta.Dependencies = normalizeDependencies(meta.Dependencies)
+
+		ts.componentMeta[normalizedName] = meta
+		ts.componentSrc[normalizedName] = catalog
+	}
+
+	return nil
+}
+
+// RegisterComponentCatalogJSON registers a catalog from a JSON manifest.
+// JSON payload format:
+//
+//	{
+//	  "components": {
+//	    "button": { "description": "...", "variants": ["solid", "outline"] }
+//	  }
+//	}
+func (ts *TemplateSet) RegisterComponentCatalogJSON(catalogName string, manifest []byte) error {
+	var parsed componentManifest
+	if err := json.Unmarshal(manifest, &parsed); err != nil {
+		return fmt.Errorf("error parsing component manifest JSON: %w", err)
+	}
+
+	if len(parsed.Components) == 0 {
+		return fmt.Errorf("manifest has no components")
+	}
+
+	return ts.RegisterComponentCatalog(catalogName, parsed.Components)
+}
+
+// RegisterComponentCatalogFile loads a JSON manifest from disk and registers the catalog.
+func (ts *TemplateSet) RegisterComponentCatalogFile(catalogName string, filename string) error {
+	content, err := os.ReadFile(filename)
+	if err != nil {
+		return fmt.Errorf("error reading component manifest file %s: %w", filename, err)
+	}
+
+	return ts.RegisterComponentCatalogJSON(catalogName, content)
+}
+
+// RegisterComponentCatalogFS loads a JSON manifest from an fs.FS and registers the catalog.
+func (ts *TemplateSet) RegisterComponentCatalogFS(catalogName string, filesystem fs.FS, manifestPath string) error {
+	content, err := fs.ReadFile(filesystem, manifestPath)
+	if err != nil {
+		return fmt.Errorf("error reading component manifest file %s from filesystem: %w", manifestPath, err)
+	}
+
+	return ts.RegisterComponentCatalogJSON(catalogName, content)
+}
+
+// ListComponents returns all registered components sorted by name.
+func (ts *TemplateSet) ListComponents() []ComponentInfo {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	components := make([]ComponentInfo, 0, len(ts.componentMeta))
+	for name, meta := range ts.componentMeta {
+		components = append(components, ComponentInfo{
+			Name:        name,
+			Catalog:     ts.componentSrc[name],
+			Description: meta.Description,
+			Version:     meta.Version,
+		})
+	}
+
+	sort.Slice(components, func(i, j int) bool {
+		return components[i].Name < components[j].Name
+	})
+
+	return components
+}
+
+// GetComponentMeta returns metadata for a specific component.
+func (ts *TemplateSet) GetComponentMeta(name string) (ComponentMeta, bool) {
+	normalizedName := normalizeTemplateName(name)
+
+	ts.mu.Lock()
+	meta, exists := ts.componentMeta[normalizedName]
+	ts.mu.Unlock()
+
+	return meta, exists
 }
 
 // AddFuncs adds custom functions to the template set.
@@ -435,17 +954,45 @@ func (ts *TemplateSet) processTemplate(name string, content []byte) error {
 	return nil
 }
 
-// finalizeParsing completes the template processing after all individual templates have been parsed
-func (ts *TemplateSet) finalizeParsing() error {
-	type compCall struct {
-		Args []interface{}
-		Name string
+// registerComponentHelpersInternal creates and registers template helper functions for all registered components.
+// These helpers provide a cleaner syntax for calling components than the generic 'comp' function.
+// For example, instead of {{ comp "button" (dict "label" "Click") }}, users can write {{ button "Click" }}.
+func (ts *TemplateSet) registerComponentHelpersInternal(internalFuncs template.FuncMap) {
+	// Get a snapshot of component names while locked
+	ts.mu.Lock()
+	componentNames := make([]string, 0, len(ts.componentMeta))
+	for name := range ts.componentMeta {
+		componentNames = append(componentNames, name)
+	}
+	ts.mu.Unlock()
+
+	if len(componentNames) == 0 {
+		return
 	}
 
-	// Component call stack for handling nested components
-	var compStack []compCall
-	var compMu sync.Mutex
+	helperFuncs := make(template.FuncMap)
 
+	// Create a helper function for each registered component
+	for _, componentName := range componentNames {
+		// Use a function factory to properly capture the component name in the closure
+		helperFunc := ts.createComponentHelperFunc(componentName)
+		helperFuncs[componentName] = helperFunc
+	}
+
+	// Register all helpers with the master template
+	ts.masterTmpl.Funcs(helperFuncs)
+}
+
+// createComponentHelperFunc creates a helper function for a single component.
+// This factory pattern ensures proper closure variable capture.
+func (ts *TemplateSet) createComponentHelperFunc(componentName string) func(...interface{}) (template.HTML, error) {
+	return func(args ...interface{}) (template.HTML, error) {
+		return ts.execComponent(componentName, args...)
+	}
+}
+
+// finalizeParsing completes the template processing after all individual templates have been parsed
+func (ts *TemplateSet) finalizeParsing() error {
 	// Global functions for all templates
 	internalFuncs := template.FuncMap{
 		"_register_template": func(name string) string {
@@ -469,28 +1016,28 @@ func (ts *TemplateSet) finalizeParsing() error {
 			return dict, nil
 		},
 		"param": func(index int) interface{} {
-			compMu.Lock()
-			defer compMu.Unlock()
+			ts.compMu.Lock()
+			defer ts.compMu.Unlock()
 
-			if len(compStack) == 0 {
+			if len(ts.compStack) == 0 {
 				return nil
 			}
 
-			current := compStack[len(compStack)-1]
+			current := ts.compStack[len(ts.compStack)-1]
 			if index < 0 || index >= len(current.Args) {
 				return nil
 			}
 			return current.Args[index]
 		},
 		"paramOr": func(index int, defaultValue interface{}) interface{} {
-			compMu.Lock()
-			defer compMu.Unlock()
+			ts.compMu.Lock()
+			defer ts.compMu.Unlock()
 
-			if len(compStack) == 0 {
+			if len(ts.compStack) == 0 {
 				return defaultValue
 			}
 
-			current := compStack[len(compStack)-1]
+			current := ts.compStack[len(ts.compStack)-1]
 			if index < 0 || index >= len(current.Args) {
 				return defaultValue
 			}
@@ -500,62 +1047,15 @@ func (ts *TemplateSet) finalizeParsing() error {
 			return current.Args[index]
 		},
 		"comp": func(templateName string, args ...interface{}) (template.HTML, error) {
-			name := strings.TrimSuffix(templateName, ".html")
-
-			ts.mu.Lock()
-			ts.usedTemplates[name] = true
-			ts.mu.Unlock()
-
-			compMu.Lock()
-			compStack = append(compStack, compCall{
-				Args: args,
-				Name: name,
-			})
-			compMu.Unlock()
-
-			// Ensures stack removal when finished
-			defer func() {
-				compMu.Lock()
-				if len(compStack) > 0 {
-					compStack = compStack[:len(compStack)-1]
-				}
-				compMu.Unlock()
-			}()
-
-			var buf strings.Builder
-			var data interface{}
-
-			if len(args) == 1 {
-				if mapData, ok := args[0].(map[string]interface{}); ok {
-					data = mapData
-				} else {
-					data = map[string]interface{}{
-						"0": args[0],
-					}
-				}
-			} else {
-				dataMap := make(map[string]interface{})
-				for i, arg := range args {
-					dataMap[fmt.Sprintf("%d", i)] = arg
-				}
-				data = dataMap
-			}
-
-			tmplName := name
-			if !strings.HasSuffix(tmplName, ".html") {
-				tmplName = tmplName + ".html"
-			}
-
-			if err := ts.masterTmpl.ExecuteTemplate(&buf, tmplName, data); err != nil {
-				return "", err
-			}
-
-			return template.HTML(buf.String()), nil
+			return ts.execComponent(templateName, args...)
 		},
 	}
 
 	// Add internal functions
 	ts.masterTmpl.Funcs(internalFuncs)
+
+	// Register component helpers (auto-generated wrapper functions)
+	ts.registerComponentHelpersInternal(internalFuncs)
 
 	// Second pass: create the templates and allow references between them
 	for name, html := range ts.templateHTML {
@@ -595,6 +1095,13 @@ func (ts *TemplateSet) finalizeParsing() error {
 			layoutFuncs[name] = fn
 		}
 	}
+
+	// Add component helper functions to layout
+	ts.mu.Lock()
+	for componentName := range ts.componentMeta {
+		layoutFuncs[componentName] = ts.createComponentHelperFunc(componentName)
+	}
+	ts.mu.Unlock()
 
 	layoutTmpl := template.New(ts.layoutName)
 	layoutTmpl.Funcs(layoutFuncs)
@@ -695,49 +1202,90 @@ func (ts *TemplateSet) ParseDirs(dirs ...string) error {
 // Returns an error if any template cannot be parsed
 // or if the layout template is not found.
 func (ts *TemplateSet) ParseFS(filesystem fs.FS, roots ...string) error {
+	layoutFound, err := ts.parseFSRoots(filesystem, roots)
+	if err != nil {
+		return err
+	}
+
+	if !layoutFound {
+		return fmt.Errorf("layout template '%s' not found in any of the provided filesystem paths", ts.layoutName)
+	}
+
+	return ts.finalizeParsing()
+}
+
+func (ts *TemplateSet) parseFSRoots(filesystem fs.FS, roots []string) (bool, error) {
 	layoutFound := false
 
 	for _, root := range roots {
-		// Read all files in this root directory of the filesystem
+		if strings.TrimSpace(root) == "" {
+			return false, fmt.Errorf("filesystem root cannot be empty")
+		}
+
 		err := fs.WalkDir(filesystem, root, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
 
-			// Skip directories
 			if d.IsDir() {
 				return nil
 			}
 
-			// Process only HTML and template files
 			ext := filepath.Ext(d.Name())
 			if ext != ".html" && ext != ".tmpl" {
 				return nil
 			}
 
-			// Extract the template name
 			name := strings.TrimSuffix(d.Name(), ext)
 			if name == ts.layoutName {
 				layoutFound = true
 			}
 
-			// Read file content
 			content, err := fs.ReadFile(filesystem, path)
 			if err != nil {
 				return fmt.Errorf("error reading file %s: %w", path, err)
 			}
 
-			// Process the template
 			return ts.processTemplate(name, content)
 		})
 
 		if err != nil {
-			return fmt.Errorf("error processing embedded filesystem path %s: %w", root, err)
+			return false, fmt.Errorf("error processing embedded filesystem path %s: %w", root, err)
+		}
+	}
+
+	return layoutFound, nil
+}
+
+// ParseManyFS parses templates from multiple filesystems in a single pass.
+// This is useful when app templates and component catalogs come from different embed.FS values.
+// At least one source must provide the configured layout template.
+func (ts *TemplateSet) ParseManyFS(sources ...ParseFSSource) error {
+	if len(sources) == 0 {
+		return fmt.Errorf("at least one filesystem source is required")
+	}
+
+	layoutFound := false
+
+	for idx, source := range sources {
+		if source.Filesystem == nil {
+			return fmt.Errorf("filesystem source %d is nil", idx)
+		}
+		if len(source.Roots) == 0 {
+			return fmt.Errorf("filesystem source %d has no roots", idx)
+		}
+
+		foundInSource, err := ts.parseFSRoots(source.Filesystem, source.Roots)
+		if err != nil {
+			return err
+		}
+		if foundInSource {
+			layoutFound = true
 		}
 	}
 
 	if !layoutFound {
-		return fmt.Errorf("layout template '%s' not found in any of the provided filesystem paths", ts.layoutName)
+		return fmt.Errorf("layout template '%s' not found in any provided filesystem source", ts.layoutName)
 	}
 
 	return ts.finalizeParsing()

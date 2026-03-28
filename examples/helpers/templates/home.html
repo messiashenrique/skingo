@@ -1,0 +1,102 @@
+<template>
+  <div class="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 text-white">
+    <!-- Header -->
+    <header class="border-b border-slate-700">
+      <div class="max-w-6xl mx-auto px-6 py-8">
+        <h1 class="text-4xl font-bold mb-2">{{ .title }}</h1>
+        <p class="text-slate-400">Demonstrating auto-generated component helper functions</p>
+      </div>
+    </header>
+
+    <!-- Main content -->
+    <main class="max-w-6xl mx-auto px-6 py-12">
+      <!-- Section 1: Buttons with helpers -->
+      <section class="mb-16">
+        <h2 class="text-2xl font-bold mb-6">Button Helpers</h2>
+        <p class="text-slate-400 mb-6">Using the new helper syntax for cleaner component calls</p>
+        
+        <div class="space-y-4">
+          <div class="flex flex-wrap gap-3">
+            {{ SkButton "Default Button" "solid" }}
+            {{ SkButton "Outline Button" "outline" }}
+            {{ SkButton "Ghost Button" "ghost" }}
+          </div>
+
+          <div class="flex flex-wrap gap-3">
+            {{ SkButton "Click Me" "solid" }}
+            {{ SkButton "Cancel" "outline" }}
+            {{ SkButton "Learn More" "ghost" }}
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 2: Badges with helpers -->
+      <section class="mb-16">
+        <h2 class="text-2xl font-bold mb-6">Badge Helpers</h2>
+        <p class="text-slate-400 mb-6">Using badge helpers with different variants</p>
+        
+        <div class="flex flex-wrap gap-3">
+          {{ SkBadge "Active" "default" }}
+          {{ SkBadge "Success" "success" }}
+          {{ SkBadge "Warning" "warning" }}
+          {{ SkBadge "Danger" "danger" }}
+          {{ SkBadge "Info" "info" }}
+        </div>
+      </section>
+
+      <!-- Section 3: Alerts with helpers -->
+      <section class="mb-16">
+        <h2 class="text-2xl font-bold mb-6">Alert Helpers</h2>
+        <p class="text-slate-400 mb-6">Using alert helpers with different types</p>
+        
+        <div class="space-y-4">
+          {{ SkInfo "Info" "info" "This is an informational alert message." }}
+          {{ SkInfo "Success" "success" "Your operation completed successfully!" }}
+          {{ SkInfo "Warning" "warning" "Please review this important warning." }}
+          {{ SkInfo "Error" "error" "An error occurred. Please try again." }}
+        </div>
+      </section>
+
+      <!-- Section 4: Input with helper -->
+      <section class="mb-16">
+        <h2 class="text-2xl font-bold mb-6">Input Helpers</h2>
+        <p class="text-slate-400 mb-6">Using input helper for text fields</p>
+        
+        <form class="space-y-4 max-w-sm">
+          {{ SkInput "text" "Name" "Enter your name" }}
+          {{ SkInput "email" "Email" "Enter your email" }}
+          {{ SkInput "password" "Password" "Enter your password" }}
+          <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded">Submit</button>
+        </form>
+      </section>
+
+      <!-- Section 5: Cards with helpers -->
+      <section class="mb-16">
+        <h2 class="text-2xl font-bold mb-6">Card Helpers</h2>
+        <p class="text-slate-400 mb-6">Using card helpers for content containers</p>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {{ SkCard "Feature 1" "Description of the first feature goes here." }}
+          {{ SkCard "Feature 2" "Description of the second feature goes here." }}
+          {{ SkCard "Feature 3" "Description of the third feature goes here." }}
+          {{ SkCard "Feature 4" "Description of the fourth feature goes here." }}
+        </div>
+      </section>
+
+      <!-- Footer note -->
+      <section class="pt-12 border-t border-slate-700">
+        <p class="text-slate-400 text-sm">
+          ✨ All components are called using the new helper syntax (e.g., button "text" "variant")
+          instead of the generic comp function.
+        </p>
+      </section>
+    </main>
+  </div>
+</template>
+
+<style>
+	:root {
+		--primary: #3b82f6;
+		--primary-hover: #2563eb;
+	}
+</style>
