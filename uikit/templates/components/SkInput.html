@@ -2,8 +2,55 @@
   {{$name := .name}}
   {{$label := .label}}
   {{$placeholder := .placeholder}}
-  <div class="space-y-1.5">
-    {{if $label}}<label class="block text-sm font-medium text-slate-700" for="{{$name}}">{{$label}}</label>{{end}}
-    <input id="{{$name}}" name="{{$name}}" placeholder="{{$placeholder}}" class="block w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition focus:border-slate-600 focus:ring-2 focus:ring-slate-200" />
+  <div class="sk-input-wrapper">
+    {{if $label}}<label class="sk-input-label" for="{{$name}}">{{$label}}</label>{{end}}
+    <input id="{{$name}}" name="{{$name}}" placeholder="{{$placeholder}}" class="sk-input" />
   </div>
 </template>
+
+<style>
+  .sk-input-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm, 0.5rem);
+  }
+
+  .sk-input-label {
+    display: block;
+    font-size: var(--font-size-sm, 0.875rem);
+    font-weight: var(--font-weight-medium, 500);
+    color: var(--color-text, #0f172a);
+    margin-bottom: var(--spacing-xs, 0.25rem);
+  }
+
+  .sk-input {
+    display: block;
+    width: 100%;
+    padding: var(--input-padding-v, 0.5rem) var(--input-padding-h, 0.75rem);
+    min-height: var(--input-height, 2.5rem);
+    font-size: var(--font-size-md, 0.95rem);
+    font-family: var(--font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif);
+    color: var(--color-text, #0f172a);
+    background-color: var(--color-background, #ffffff);
+    border: var(--border-width-thin, 1px) solid var(--color-border, #cbd5e1);
+    border-radius: var(--border-radius-md, 0.5rem);
+    box-shadow: var(--shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.08));
+    outline: none;
+    transition: all 150ms ease-in-out;
+  }
+
+  .sk-input::placeholder {
+    color: var(--color-text-muted, #64748b);
+  }
+
+  .sk-input:focus {
+    border-color: var(--color-primary, #475569);
+    box-shadow: 0 0 0 3px var(--color-primary-light, #e2e8f0);
+  }
+
+  .sk-input:disabled {
+    background-color: var(--color-surface, #f8fafc);
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+</style>

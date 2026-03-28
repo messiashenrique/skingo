@@ -1,0 +1,140 @@
+<template>
+	<div class="hero">
+		<h1>{{ .Title }}</h1>
+		<p>{{ .Description }}</p>
+	</div>
+
+	<div class="section">
+		<h2>Button Variants</h2>
+		<div class="component-grid">
+			<div class="component-example">
+				<span class="component-label">Primary (Default)</span>
+				{{ SkButton "Click me" "primary" }}
+			</div>
+			<div class="component-example">
+				<span class="component-label">Outline</span>
+				{{ SkButton "Click me" "outline" }}
+			</div>
+			<div class="component-example">
+				<span class="component-label">Ghost</span>
+				{{ SkButton "Click me" "ghost" }}
+			</div>
+		</div>
+	</div>
+
+	<div class="section">
+		<h2>Input Component</h2>
+		<div class="component-example">
+			{{ SkInput (dict "name" "email" "label" "Email Address" "placeholder" "you@example.com") }}
+		</div>
+	</div>
+
+	<div class="section">
+		<h2>Badge Variants</h2>
+		<div class="component-grid">
+			<div class="component-example">
+				<span class="component-label">Default</span>
+				{{ SkBadge "Default" }}
+			</div>
+			<div class="component-example">
+				<span class="component-label">Success</span>
+				{{ SkBadge "Active" "success" }}
+			</div>
+			<div class="component-example">
+				<span class="component-label">Warning</span>
+				{{ SkBadge "Pending" "warning" }}
+			</div>
+		</div>
+	</div>
+
+	<div class="section">
+		<h2>Info Variants</h2>
+		<div class="component-grid">
+			<div class="component-example">
+				{{ SkInfo (dict "title" "Information" "message" "This is an informational message") }}
+			</div>
+			<div class="component-example">
+				{{ SkInfo (dict "title" "Success" "message" "Operation completed successfully" "variant" "success") }}
+			</div>
+			<div class="component-example">
+				{{ SkInfo (dict "title" "Error" "message" "An error occurred while processing your request" "variant" "error") }}
+			</div>
+		</div>
+	</div>
+
+	<div class="section">
+		<h2>Card Component</h2>
+		<div class="component-grid">
+			<div class="component-example">
+				<span class="component-label">Card with Action</span>
+				{{ SkCard (dict "title" "Welcome" "content" "This is a card component with an action button" "actionLabel" "Learn More") }}
+			</div>
+		</div>
+	</div>
+
+	<div class="section">
+		<h2>Design Tokens - Colors</h2>
+		<div class="token-grid">
+			<div class="token-item">
+				<div class="color-swatch" style="background-color: var(--color-primary);"></div>
+				<div class="token-name">Primary</div>
+				<div class="token-value">var(--color-primary)</div>
+			</div>
+			<div class="token-item">
+				<div class="color-swatch" style="background-color: var(--color-success);"></div>
+				<div class="token-name">Success</div>
+				<div class="token-value">var(--color-success)</div>
+			</div>
+			<div class="token-item">
+				<div class="color-swatch" style="background-color: var(--color-warning);"></div>
+				<div class="token-name">Warning</div>
+				<div class="token-value">var(--color-warning)</div>
+			</div>
+			<div class="token-item">
+				<div class="color-swatch" style="background-color: var(--color-error);"></div>
+				<div class="token-name">Error</div>
+				<div class="token-value">var(--color-error)</div>
+			</div>
+			<div class="token-item">
+				<div class="color-swatch" style="background-color: var(--color-info);"></div>
+				<div class="token-name">Info</div>
+				<div class="token-value">var(--color-info)</div>
+			</div>
+			<div class="token-item">
+				<div class="color-swatch" style="background-color: var(--color-text);"></div>
+				<div class="token-name">Text</div>
+				<div class="token-value">var(--color-text)</div>
+			</div>
+		</div>
+	</div>
+
+	<div class="section">
+		<h2>Design Tokens - Spacing & Sizing</h2>
+		<div class="token-grid">
+			<div class="token-item">
+				<div class="token-name">Button Height</div>
+				<div class="token-value">var(--button-height)</div>
+			</div>
+			<div class="token-item">
+				<div class="token-name">Input Height</div>
+				<div class="token-value">var(--input-height)</div>
+			</div>
+			<div class="token-item">
+				<div class="token-name">Spacing MD</div>
+				<div class="token-value">var(--spacing-md)</div>
+			</div>
+			<div class="token-item">
+				<div class="token-name">Border Radius MD</div>
+				<div class="token-value">var(--border-radius-md)</div>
+			</div>
+			<div class="token-item">
+				<div class="token-name">Font Size LG</div>
+				<div class="token-value">var(--font-size-lg)</div>
+			</div>
+			<div class="token-item">
+				<div class="token-name">Shadow MD</div>
+				<div class="token-value">var(--shadow-md)</div>
+			</div>
+		</div>
+	</div>
+</template>

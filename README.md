@@ -556,6 +556,131 @@ See `skingo_test.go` for comprehensive examples of testing:
 - Validation options and type checking
 - Component helper function generation
 
+## Design Tokens & Themes
+
+Skingo includes a centralized design token system that allows you to define and manage all UI design values in one place, making it easy to create multiple theme variants (light, dark, custom).
+
+### Using Design Tokens
+
+The uikit package provides a complete design token system with tokens for colors, spacing, typography, borders, and shadows:
+
+```go
+import (
+	"github.com/messiashenrique/skingo"
+	"github.com/messiashenrique/skingo/uikit"
+)
+
+func main() {
+	ts := skingo.NewTemplateSet("layout")
+	
+	// Register the uikit catalog
+	uikit.RegisterCatalog(ts)
+	
+	// Register the theme system (adds CSS variables and template functions)
+	uikit.RegisterTheme(ts, "light")  // or "dark" for dark theme
+	
+	// Parse templates - CSS variables are now injected
+	ts.ParseFS(uikit.FS(), "templates", uikit.Roots()[0])
+	
+	// All Sk* components now use CSS custom properties instead of hardcoded colors
+}
+```
+
+### Theme Switching
+
+Switch between themes at runtime:
+
+```go
+// Change to dark theme
+uikit.SetGlobalTheme("dark")
+
+// Get current theme
+currentTheme := uikit.GetGlobalTheme()  // returns "light" or "dark"
+```
+
+### Accessing Tokens in Templates
+
+Design tokens are automatically injected as CSS variables and template functions:
+
+```html
+<!-- Using CSS variables (recommended for component styles) -->
+<style>
+  .my-element {
+    color: var(--color-primary);
+    padding: var(--spacing-md);
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-md);
+  }
+</style>
+
+<!-- Using template functions for dynamic access -->
+<div style="color: {{ colorPrimary }};">
+  Dynamic color
+</div>
+
+<!-- Inject CSS variables into layout -->
+{{ themeVars }}
+```
+
+### Available Design Tokens
+
+**Colors:**
+- `--color-primary`, `--color-secondary`, `--color-success`, `--color-warning`, `--color-error`, `--color-info`
+- `--color-background`, `--color-surface`, `--color-border`, `--color-text`, `--color-text-muted`
+- Light variants: `--color-primary-light`, `--color-success-light`, etc.
+- Outline variants: `--color-primary-outline`, `--color-error-outline`, etc.
+
+**Spacing:**
+- `--spacing-xs` (0.25rem), `--spacing-sm` (0.5rem), `--spacing-md` (1rem), `--spacing-lg` (1.5rem), `--spacing-xl` (2rem), `--spacing-xxl` (3rem)
+
+**Typography:**
+- Font family: `--font-family`
+- Sizes: `--font-size-xs`, `--font-size-sm`, `--font-size-md`, `--font-size-lg`, `--font-size-xl`, `--font-size-xxl`
+- Weights: `--font-weight-regular`, `--font-weight-medium`, `--font-weight-semibold`, `--font-weight-bold`
+- Line heights: `--line-height-tight`, `--line-height-normal`, `--line-height-relaxed`
+
+**Borders & Shadows:**
+- Border radius: `--border-radius-sm`, `--border-radius-md`, `--border-radius-lg`, `--border-radius-xl`
+- Border width: `--border-width-thin`, `--border-width-base`, `--border-width-thick`
+- Shadows: `--shadow-sm`, `--shadow-md`, `--shadow-lg`, `--shadow-xl`
+
+**Component-specific:**
+- Button: `--button-padding-v`, `--button-padding-h`, `--button-height`, `--button-font-size`
+- Input: `--input-padding-v`, `--input-padding-h`, `--input-height`
+- Card: `--card-padding`, `--card-border-radius`
+- Badge: `--badge-padding-v`, `--badge-padding-h`
+
+### Creating Custom Themes
+
+To create a custom theme, extend the design token system:
+
+```go
+package main
+
+import (
+	"github.com/messiashenrique/skingo/uikit"
+)
+
+func init() {
+	// Get the theme manager
+	tm := uikit.GetThemeManager()
+	
+	// Get light theme as base
+	customTokens := uikit.LightTheme()
+	
+	// Customize colors
+	customTokens.Colors.Primary = "#FF6B6B"
+	customTokens.Colors.Secondary = "#4ECDC4"
+	customTokens.Colors.Success = "#95E1D3"
+	
+	// Create new token set
+	tm.SetTheme("custom")
+	// Set custom tokens on theme manager...
+}
+```
+
+See `examples/themed` for a complete example of using themes with light/dark mode switching.
+
 ## Roadmap for Development
 
 | Stage | Description | Priority | Status |
@@ -564,8 +689,8 @@ See `skingo_test.go` for comprehensive examples of testing:
 | **Performance Optimization** | Refactoring to improve rendering efficiency | High | 📅 Planned |
 | **Full Documentation** | Detailed documentation with examples for each feature | High | 🔄 In progress |
 | **HTMX Integration** | Improved support for HTMX with dedicated helpers | High | 📅 Planned |
-| **Themed Variants** | Component variants with light/dark/custom theme support | High | 📅 Planned |
-| **Design Tokens** | Centralized design token system for uikit components | High | 📅 Planned |
+| **Themed Variants** | Component variants with light/dark/custom theme support | High | ✅ Complete |
+| **Design Tokens** | Centralized design token system for uikit components | High | ✅ Complete |
 | **Advanced Examples** | Repository with more complex examples and real use cases | Medium | 📅 Planned |
 | **Hot Reload** | Support for hot reload during development | Medium | 🔮 Considering |
 | **Benchmarks** | Performance comparison with other solutions | Medium | 📅 Planned |

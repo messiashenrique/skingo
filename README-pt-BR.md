@@ -526,6 +526,102 @@ ts.AddFuncs(template.FuncMap{
 ```
 * **Nota**: Este método deve ser chamado antes de `ParseDirs`.
 
+## Tokens de Design & Temas
+
+O Skingo inclui um sistema centralizado de tokens de design que permite definir e gerenciar todos os valores de UI em um único lugar, facilitando a criação de múltiplas variantes de tema (claro, escuro, customizado).
+
+### Usando Tokens de Design
+
+O pacote uikit fornece um sistema completo de tokens de design com cores, espaçamento, tipografia, bordas e sombras:
+
+```go
+import (
+	"github.com/messiashenrique/skingo"
+	"github.com/messiashenrique/skingo/uikit"
+)
+
+func main() {
+	ts := skingo.NewTemplateSet("layout")
+	
+	// Registra o catálogo uikit
+	uikit.RegisterCatalog(ts)
+	
+	// Registra o sistema de temas (add variáveis CSS e funções de template)
+	uikit.RegisterTheme(ts, "light")  // ou "dark" para tema escuro
+	
+	// Analisa templates - variáveis CSS são injetadas automaticamente
+	ts.ParseFS(uikit.FS(), "templates", uikit.Roots()[0])
+	
+	// Todos os componentes Sk* agora usam propriedades CSS customizadas
+}
+```
+
+### Trocando Temas
+
+Mude entre temas em runtime:
+
+```go
+// Altera para tema escuro
+uikit.SetGlobalTheme("dark")
+
+// Obtém tema atual
+currentTheme := uikit.GetGlobalTheme()  // retorna "light" ou "dark"
+```
+
+### Acessando Tokens em Templates
+
+Os tokens de design são injetados automaticamente como variáveis CSS e funções de template:
+
+```html
+<!-- Usando variáveis CSS (recomendado para estilos de componentes) -->
+<style>
+  .meu-elemento {
+    color: var(--color-primary);
+    padding: var(--spacing-md);
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-md);
+  }
+</style>
+
+<!-- Acessando tokens via funções de template -->
+<div style="color: {{ colorPrimary }};">
+  Cor dinâmica
+</div>
+
+<!-- Injeta variáveis CSS no layout -->
+{{ themeVars }}
+```
+
+### Tokens de Design Disponíveis
+
+**Cores:**
+- `--color-primary`, `--color-secondary`, `--color-success`, `--color-warning`, `--color-error`, `--color-info`
+- `--color-background`, `--color-surface`, `--color-border`, `--color-text`, `--color-text-muted`
+- Variantes claras: `--color-primary-light`, `--color-success-light`, etc.
+- Variantes contorno: `--color-primary-outline`, `--color-error-outline`, etc.
+
+**Espaçamento:**
+- `--spacing-xs` (0.25rem), `--spacing-sm` (0.5rem), `--spacing-md` (1rem), `--spacing-lg` (1.5rem), `--spacing-xl` (2rem), `--spacing-xxl` (3rem)
+
+**Tipografia:**
+- Família da fonte: `--font-family`
+- Tamanhos: `--font-size-xs`, `--font-size-sm`, `--font-size-md`, `--font-size-lg`, `--font-size-xl`, `--font-size-xxl`
+- Pesos: `--font-weight-regular`, `--font-weight-medium`, `--font-weight-semibold`, `--font-weight-bold`
+- Alturas de linha: `--line-height-tight`, `--line-height-normal`, `--line-height-relaxed`
+
+**Bordas & Sombras:**
+- Raio de borda: `--border-radius-sm`, `--border-radius-md`, `--border-radius-lg`, `--border-radius-xl`
+- Largura de borda: `--border-width-thin`, `--border-width-base`, `--border-width-thick`
+- Sombras: `--shadow-sm`, `--shadow-md`, `--shadow-lg`, `--shadow-xl`
+
+**Específicos de Componentes:**
+- Botão: `--button-padding-v`, `--button-padding-h`, `--button-height`, `--button-font-size`
+- Input: `--input-padding-v`, `--input-padding-h`, `--input-height`
+- Card: `--card-padding`, `--card-border-radius`
+- Badge: `--badge-padding-v`, `--badge-padding-h`
+
+Veja `examples/themed` para um exemplo completo de uso de temas com alternância light/dark mode.
+
 ## Roteiro de Desenvolvimento
 
 | Etapa | Descrição | Prioridade | Status |
@@ -534,8 +630,8 @@ ts.AddFuncs(template.FuncMap{
 | **Otimização de Performance** | Refatoração para melhorar a eficiência de renderização | Alta | 📅 Planejado |
 | **Documentação Completa** | Documentação detalhada com exemplos para cada funcionalidade | Alta | 🔄 Em progresso |
 | **Integração HTMX** | Suporte aprimorado para HTMX com helpers dedicados | Alta | 📅 Planejado |
-| **Variantes Temáticas** | Suporte a variantes de componentes com light/dark/custom themes | Alta | 📅 Planejado |
-| **Tokens de Design** | Sistema centralizado de tokens de design para componentes uikit | Alta | 📅 Planejado |
+| **Variantes Temáticas** | Suporte a variantes de componentes com light/dark/custom themes | Alta | ✅ Completo |
+| **Tokens de Design** | Sistema centralizado de tokens de design para componentes uikit | Alta | ✅ Completo |
 | **Exemplos Avançados** | Repositório com exemplos mais complexos e casos de uso reais | Média | 📅 Planejado |
 | **Hot Reload** | Suporte para hot reload durante o desenvolvimento | Média | 🔮 Considerando |
 | **Benchmarks** | Comparativo de performance com outras soluções | Média | 📅 Planejado |

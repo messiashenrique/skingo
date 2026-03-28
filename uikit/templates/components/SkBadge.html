@@ -2,8 +2,48 @@
   {{$text := paramOr 0 .text}}
   {{$variant := paramOr 1 (paramOr 2 .variant)}}
   {{$variantClass := ""}}
-  {{if eq $variant "success"}}{{$variantClass = "bg-emerald-100 text-emerald-700"}}{{else if eq $variant "warning"}}{{$variantClass = "bg-amber-100 text-amber-700"}}{{else}}{{$variantClass = "bg-slate-100 text-slate-700"}}{{end}}
-  <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold {{$variantClass}}">
+  {{if eq $variant "success"}}{{$variantClass = "sk-badge--success"}}{{else if eq $variant "warning"}}{{$variantClass = "sk-badge--warning"}}{{else}}{{$variantClass = "sk-badge--default"}}{{end}}
+  <span class="sk-badge {{$variantClass}}">
     {{$text}}
   </span>
 </template>
+
+<style>
+  .sk-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: var(--badge-padding-v, 0.25rem) var(--badge-padding-h, 0.75rem);
+    font-size: var(--font-size-sm, 0.875rem);
+    font-weight: var(--font-weight-semibold, 600);
+    border-radius: var(--border-radius-xl, 9999px);
+    white-space: nowrap;
+    font-family: var(--font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif);
+  }
+
+  .sk-badge--success {
+    background-color: var(--color-success-light, #d1fae5);
+    color: var(--color-success, #047857);
+  }
+
+  .sk-badge--warning {
+    background-color: var(--color-warning-light, #fef3c7);
+    color: var(--color-warning, #b45309);
+  }
+
+  .sk-badge--default {
+    background-color: var(--color-surface, #f1f5f9);
+    color: var(--color-text, #334155);
+    border: 1px solid var(--color-border, #e2e8f0);
+  }
+
+  .sk-badge--error {
+    background-color: var(--color-error-light, #fff1f2);
+    color: var(--color-error, #881337);
+  }
+
+  .sk-badge--info {
+    background-color: var(--color-info-light, #f0f9ff);
+    color: var(--color-info, #0c4a6e);
+  }
+</style>

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Skingo - {{.Title}}</title>
+	<style>
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+
+		html {
+			font-family: var(--font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif);
+			font-size: 16px;
+			line-height: var(--line-height-normal, 1.5);
+		}
+
+		body {
+			background-color: var(--color-background);
+			color: var(--color-text);
+			transition: background-color 200ms ease, color 200ms ease;
+		}
+
+		.nav {
+			background-color: var(--color-surface);
+			border-bottom: 1px solid var(--color-border);
+			padding: var(--spacing-md);
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+		}
+
+		.nav-title {
+			font-size: var(--font-size-lg);
+			font-weight: var(--font-weight-bold);
+			color: var(--color-primary);
+		}
+
+		.nav-links {
+			display: flex;
+			gap: var(--spacing-md);
+		}
+
+		.nav-links a {
+			padding: var(--spacing-sm) var(--spacing-md);
+			color: var(--color-primary);
+			text-decoration: none;
+			border-radius: var(--border-radius-md);
+			transition: background-color 150ms;
+		}
+
+		.nav-links a:hover {
+			background-color: var(--color-primary-light);
+		}
+
+		.container {
+			max-width: 1200px;
+			margin: 0 auto;
+			padding: var(--spacing-lg);
+		}
+
+		.hero {
+			margin-bottom: var(--spacing-xxl);
+		}
+
+		.hero h1 {
+			font-size: var(--font-size-xxl);
+			font-weight: var(--font-weight-bold);
+			margin-bottom: var(--spacing-md);
+			color: var(--color-text);
+		}
+
+		.hero p {
+			font-size: var(--font-size-lg);
+			color: var(--color-text-muted);
+			margin-bottom: var(--spacing-lg);
+		}
+
+		.section {
+			margin-bottom: var(--spacing-xxl);
+		}
+
+		.section h2 {
+			font-size: var(--font-size-xl);
+			font-weight: var(--font-weight-semibold);
+			margin-bottom: var(--spacing-lg);
+			color: var(--color-text);
+			border-bottom: 2px solid var(--color-border);
+			padding-bottom: var(--spacing-md);
+		}
+
+		.component-grid {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+			gap: var(--spacing-lg);
+		}
+
+		.component-example {
+			display: flex;
+			flex-direction: column;
+			gap: var(--spacing-md);
+			padding: var(--spacing-lg);
+			background-color: var(--color-surface);
+			border: 1px solid var(--color-border);
+			border-radius: var(--border-radius-lg);
+		}
+
+		.component-label {
+			font-size: var(--font-size-sm);
+			font-weight: var(--font-weight-semibold);
+			color: var(--color-text-muted);
+			text-transform: uppercase;
+			letter-spacing: 0.5px;
+		}
+
+		.token-grid {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+			gap: var(--spacing-md);
+		}
+
+		.token-item {
+			padding: var(--spacing-md);
+			background-color: var(--color-surface);
+			border: 1px solid var(--color-border);
+			border-radius: var(--border-radius-md);
+		}
+
+		.token-name {
+			font-size: var(--font-size-sm);
+			font-weight: var(--font-weight-semibold);
+			color: var(--color-text);
+			margin-bottom: var(--spacing-sm);
+		}
+
+		.token-value {
+			font-size: var(--font-size-sm);
+			color: var(--color-text-muted);
+			font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+			word-break: break-all;
+		}
+
+		.color-swatch {
+			width: 100%;
+			height: 60px;
+			border-radius: var(--border-radius-md);
+			border: 1px solid var(--color-border);
+			margin-bottom: var(--spacing-sm);
+		}
+	</style>
+	<script>
+		// Injetar CSS variables via JavaScript
+		const cssVars = `{{ themeVars }}`;
+		const style = document.createElement('style');
+		style.textContent = cssVars;
+		document.head.appendChild(style);
+	</script>
+</head>
+
+<body>
+	<nav class="nav">
+		<div class="nav-title">Skingo UI - Design Tokens</div>
+		<div class="nav-links">
+			<a href="/">Light Mode</a>
+			<a href="/dark">Dark Mode</a>
+		</div>
+	</nav>
+
+	<div class="container">
+		{{ .Yield }}
+	</div>
+</body>
+
+</html>

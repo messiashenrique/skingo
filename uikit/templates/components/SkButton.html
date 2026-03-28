@@ -2,8 +2,75 @@
   {{$label := paramOr 0 .label}}
   {{$variant := paramOr 1 (paramOr 2 .variant)}}
   {{$variantClass := ""}}
-  {{if eq $variant "outline"}}{{$variantClass = "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}}{{else if eq $variant "ghost"}}{{$variantClass = "bg-transparent text-slate-700 hover:bg-slate-100"}}{{else}}{{$variantClass = "bg-slate-900 text-white hover:bg-slate-800"}}{{end}}
-  <button class="inline-flex items-center rounded-md px-4 py-2 text-sm font-semibold transition-colors {{$variantClass}}">
+  {{if eq $variant "outline"}}{{$variantClass = "sk-button--outline"}}{{else if eq $variant "ghost"}}{{$variantClass = "sk-button--ghost"}}{{else}}{{$variantClass = "sk-button--primary"}}{{end}}
+  <button class="sk-button {{$variantClass}}">
     {{$label}}
   </button>
 </template>
+
+<style>
+  .sk-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: var(--button-padding-v, 0.5rem) var(--button-padding-h, 1rem);
+    min-height: var(--button-height, 2.5rem);
+    font-size: var(--button-font-size, 0.875rem);
+    font-weight: var(--font-weight-semibold, 600);
+    border-radius: var(--border-radius-md, 0.5rem);
+    border: none;
+    cursor: pointer;
+    transition: all 150ms ease-in-out;
+    font-family: var(--font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif);
+  }
+
+  .sk-button--primary {
+    background-color: var(--color-primary, #0f172a);
+    color: white;
+    box-shadow: var(--shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.08));
+  }
+
+  .sk-button--primary:hover {
+    background-color: var(--color-primary-outline, #1e293b);
+    filter: brightness(1.1);
+    box-shadow: var(--shadow-md, 0 4px 8px rgba(15, 23, 42, 0.12));
+  }
+
+  .sk-button--primary:active {
+    filter: brightness(0.95);
+  }
+
+  .sk-button--outline {
+    background-color: transparent;
+    color: var(--color-text, #334155);
+    border: 1px solid var(--color-border, #cbd5e1);
+  }
+
+  .sk-button--outline:hover {
+    background-color: var(--color-surface, #f8fafc);
+    border-color: var(--color-border, #cbd5e1);
+  }
+
+  .sk-button--outline:active {
+    background-color: var(--color-surface, #f1f5f9);
+    color: var(--color-text, #334155);
+  }
+
+  .sk-button--ghost {
+    background-color: transparent;
+    color: var(--color-text, #334155);
+  }
+
+  .sk-button--ghost:hover {
+    background-color: var(--color-surface, #f1f5f9);
+  }
+
+  .sk-button--ghost:active {
+    background-color: var(--color-border, #e2e8f0);
+  }
+
+  .sk-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+</style>
