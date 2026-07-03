@@ -36,14 +36,18 @@ type Layout struct {
 type TemplateSet struct {
 	templates     map[string]*Template
 	layout        *Layout
+	layouts       map[string]*Layout
 	layoutName    string
+	layoutUses    map[string][]string
 	masterTmpl    *template.Template
 	templateHTML  map[string]string
 	mu            sync.Mutex
+	renderMu      sync.Mutex
 	usedTemplates map[string]bool               // Track which templates have been used
 	customFuncs   template.FuncMap              // Stores custom functions
 	isolatedCache map[string]*template.Template // Cache of isolated templates
 	cacheMu       sync.RWMutex                  // Specific mutex for cache
+	sources       map[string]string             // Tracks template sources to detect duplicate names
 }
 
 const (
@@ -62,6 +66,7 @@ var (
 	openTagRegex  = regexp.MustCompile(`^\s*<[^>]+>`)
 	unwrapRegex   = regexp.MustCompile(`unwrap`)
 	firstTagRegex = regexp.MustCompile(`^\s*<([a-zA-Z][a-zA-Z0-9]*)([^>]*)>`)
+	compCallRegex = regexp.MustCompile(`{{[^}]*comp\s+"?([^"\s}]+)"?`)
 )
 
 // defaultFuncs contains the default functions available in all templates
@@ -92,12 +97,15 @@ func NewTemplateSet(layoutName string) *TemplateSet {
 	ts := &TemplateSet{
 		templates:     make(map[string]*Template),
 		layout:        nil,
+		layouts:       make(map[string]*Layout),
 		layoutName:    layoutName,
+		layoutUses:    make(map[string][]string),
 		masterTmpl:    template.New("master"),
 		templateHTML:  make(map[string]string),
 		usedTemplates: make(map[string]bool),
 		customFuncs:   make(template.FuncMap),
 		isolatedCache: make(map[string]*template.Template),
+		sources:       make(map[string]string),
 	}
 
 	// Apply default functions immediately
@@ -108,7 +116,7 @@ func NewTemplateSet(layoutName string) *TemplateSet {
 
 // AddFuncs adds custom functions to the template set.
 // These functions will be available in all templates.
-// Note: This method should be called before ParseDirs.
+// Note: This method should be called before ParseDirs or ParseFS.
 func (ts *TemplateSet) AddFuncs(funcMap template.FuncMap) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
@@ -120,6 +128,41 @@ func (ts *TemplateSet) AddFuncs(funcMap template.FuncMap) {
 
 	// Apply them to the master template
 	ts.masterTmpl.Funcs(funcMap)
+}
+
+func (ts *TemplateSet) registerSource(name, source string) error {
+	if previous, exists := ts.sources[name]; exists && previous != source {
+		return fmt.Errorf("duplicate template name %q found in %s and %s", name, previous, source)
+	}
+	ts.sources[name] = source
+	return nil
+}
+
+func extractComponentNames(content string) []string {
+	matches := compCallRegex.FindAllStringSubmatch(content, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]bool, len(matches))
+	names := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if len(match) <= 1 {
+			continue
+		}
+		name := strings.TrimSuffix(match[1], ".html")
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		names = append(names, name)
+	}
+	return names
+}
+
+func isLayoutContent(content []byte) bool {
+	contentStr := string(content)
+	return !htmlRegex.Match(content) && strings.Contains(contentStr, ".Yield")
 }
 
 // generateScopeClass build a scope class based on the template name and returns
@@ -264,7 +307,7 @@ func containedScopedCSS(css string, scopeClass string) string {
 }
 
 // parseLayoutFile processes a layout template file
-func (ts *TemplateSet) parseLayoutFile(content string) error {
+func (ts *TemplateSet) parseLayoutFile(name string, content string) error {
 	layout := &Layout{
 		HTML: content,
 	}
@@ -289,16 +332,24 @@ func (ts *TemplateSet) parseLayoutFile(content string) error {
 		"\n\t<script>{{ .JS }}</script>\n" +
 		layout.HTML[bodyCloseIndex:]
 
-	ts.layout = layout
+	ts.layouts[name] = layout
+	ts.layoutUses[name] = extractComponentNames(layout.HTML)
+	if name == ts.layoutName {
+		ts.layout = layout
+	}
 
 	return nil
 }
 
 // processTemplate processes a single template and extracts HTML, CSS, and JS
-func (ts *TemplateSet) processTemplate(name string, content []byte) error {
+func (ts *TemplateSet) processTemplate(name string, content []byte, source string) error {
+	if err := ts.registerSource(name, source); err != nil {
+		return err
+	}
+
 	// Process layout in a special way
-	if name == ts.layoutName {
-		return ts.parseLayoutFile(string(content))
+	if name == ts.layoutName || isLayoutContent(content) {
+		return ts.parseLayoutFile(name, string(content))
 	}
 
 	t := &Template{
@@ -596,14 +647,16 @@ func (ts *TemplateSet) finalizeParsing() error {
 		}
 	}
 
-	layoutTmpl := template.New(ts.layoutName)
-	layoutTmpl.Funcs(layoutFuncs)
+	for name, layout := range ts.layouts {
+		layoutTmpl := template.New(name)
+		layoutTmpl.Funcs(layoutFuncs)
 
-	layoutTmpl, err := layoutTmpl.Parse(ts.layout.HTML)
-	if err != nil {
-		return err
+		parsedLayout, err := layoutTmpl.Parse(layout.HTML)
+		if err != nil {
+			return fmt.Errorf("error parsing layout %s: %w", name, err)
+		}
+		layout.tmpl = parsedLayout
 	}
-	ts.layout.tmpl = layoutTmpl
 
 	return nil
 }
@@ -618,7 +671,7 @@ func (ts *TemplateSet) parseFile(filename string) error {
 	name := filepath.Base(filename)
 	name = strings.TrimSuffix(name, filepath.Ext(name))
 
-	return ts.processTemplate(name, content)
+	return ts.processTemplate(name, content, filename)
 }
 
 // ParseDirs parses all HTML/template files in the given directories.
@@ -658,8 +711,9 @@ func (ts *TemplateSet) ParseDirs(dirs ...string) error {
 				if name == ts.layoutName {
 					layoutFound = true
 				}
-				if err := ts.parseFile(filepath.Join(dir, file.Name())); err != nil {
-					return fmt.Errorf("error parsing file %s: %w", file.Name(), err)
+				path := filepath.Join(dir, file.Name())
+				if err := ts.parseFile(path); err != nil {
+					return fmt.Errorf("error parsing file %s: %w", path, err)
 				}
 			}
 		}
@@ -728,7 +782,7 @@ func (ts *TemplateSet) ParseFS(filesystem fs.FS, roots ...string) error {
 			}
 
 			// Process the template
-			return ts.processTemplate(name, content)
+			return ts.processTemplate(name, content, path)
 		})
 
 		if err != nil {
@@ -805,6 +859,20 @@ func (ts *TemplateSet) ExecuteIsolatedFS(w io.Writer, filesystem fs.FS, fsPath s
 	return parsedTmpl.Execute(w, data)
 }
 
+// MustParseDirs invokes ParseDirs and panics if parsing fails.
+func (ts *TemplateSet) MustParseDirs(dirs ...string) {
+	if err := ts.ParseDirs(dirs...); err != nil {
+		panic(err)
+	}
+}
+
+// MustParseFS invokes ParseFS and panics if parsing fails.
+func (ts *TemplateSet) MustParseFS(filesystem fs.FS, roots ...string) {
+	if err := ts.ParseFS(filesystem, roots...); err != nil {
+		panic(err)
+	}
+}
+
 // ParseDir invokes ParseDirs, but with a unique directory.
 func (ts *TemplateSet) ParseDir(dir string) error {
 	return ts.ParseDirs(dir)
@@ -832,13 +900,27 @@ func (ts *TemplateSet) ParseDir(dir string) error {
 // Returns an error if the requested template does not exist, if the layout is
 // not defined, or if an error occurs during template execution.
 func (ts *TemplateSet) Execute(w io.Writer, name string, data interface{}) error {
+	return ts.ExecuteWithLayout(w, ts.layoutName, name, data)
+}
+
+// ExecuteWithLayout renders a specific template using the requested layout.
+// The layoutName parameter must match a parsed layout template name without extension.
+func (ts *TemplateSet) ExecuteWithLayout(w io.Writer, layoutName string, name string, data interface{}) error {
+	ts.renderMu.Lock()
+	defer ts.renderMu.Unlock()
+
+	return ts.executeWithLayout(w, layoutName, name, data)
+}
+
+func (ts *TemplateSet) executeWithLayout(w io.Writer, layoutName string, name string, data interface{}) error {
 	_, ok := ts.templates[name]
 	if !ok {
 		return fmt.Errorf("template %s not found", name)
 	}
 
-	if ts.layout == nil {
-		return fmt.Errorf("layout template not defined")
+	layout, ok := ts.layouts[layoutName]
+	if !ok || layout == nil {
+		return fmt.Errorf("layout template %s not found", layoutName)
 	}
 
 	// Clean the usedTemplates list.
@@ -846,18 +928,9 @@ func (ts *TemplateSet) Execute(w io.Writer, name string, data interface{}) error
 	ts.usedTemplates = make(map[string]bool)
 	ts.mu.Unlock()
 
-	// Pre-parse the layout to find all component calls
-	layoutContent := ts.layout.HTML
-	compRegex := regexp.MustCompile(`{{[^}]*comp\s+"?([^"\s}]+)"?`)
-	matches := compRegex.FindAllStringSubmatch(layoutContent, -1)
-
 	ts.mu.Lock()
-	for _, match := range matches {
-		if len(match) > 1 {
-			compName := match[1]
-			compName = strings.TrimSuffix(compName, ".html")
-			ts.usedTemplates[compName] = true
-		}
+	for _, compName := range ts.layoutUses[layoutName] {
+		ts.usedTemplates[compName] = true
 	}
 	ts.mu.Unlock()
 
@@ -897,7 +970,39 @@ func (ts *TemplateSet) Execute(w io.Writer, name string, data interface{}) error
 	}
 
 	// Execute the layout template with the prepared data
-	return ts.layout.tmpl.Execute(w, layoutData)
+	return layout.tmpl.Execute(w, layoutData)
+}
+
+// ExecuteString renders a specific template using the configured layout and
+// returns the generated HTML as a string.
+func (ts *TemplateSet) ExecuteString(name string, data interface{}) (string, error) {
+	var b strings.Builder
+	if err := ts.Execute(&b, name, data); err != nil {
+		return "", err
+	}
+	return b.String(), nil
+}
+
+// ExecuteStringWithLayout renders a specific template using the requested
+// layout and returns the generated HTML as a string.
+func (ts *TemplateSet) ExecuteStringWithLayout(layoutName string, name string, data interface{}) (string, error) {
+	var b strings.Builder
+	if err := ts.ExecuteWithLayout(&b, layoutName, name, data); err != nil {
+		return "", err
+	}
+	return b.String(), nil
+}
+
+// Render invokes ExecuteString.
+func (ts *TemplateSet) Render(name string, data interface{}) (string, error) {
+	return ts.ExecuteString(name, data)
+}
+
+// ClearIsolatedCache removes all cached isolated templates.
+func (ts *TemplateSet) ClearIsolatedCache() {
+	ts.cacheMu.Lock()
+	defer ts.cacheMu.Unlock()
+	ts.isolatedCache = make(map[string]*template.Template)
 }
 
 // ExecuteIsolated renders a template directly, without using the configured layout.
@@ -939,7 +1044,7 @@ func (ts *TemplateSet) ExecuteIsolated(w io.Writer, filename string, data interf
 
 	var htmlContent string
 	if matches := htmlRegex.FindStringSubmatch(string(content)); len(matches) > 1 {
-		htmlContent = matches[1]
+		htmlContent = matches[2]
 	} else {
 		htmlContent = string(content)
 	}

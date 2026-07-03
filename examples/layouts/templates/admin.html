@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset="UTF-8">
+	<title>Skingo - Admin Layout</title>
+	<style>
+		body {
+			font-family: Arial, sans-serif;
+			margin: 0;
+			background: #111827;
+			color: #f9fafb;
+			display: grid;
+			grid-template-columns: 14rem 1fr;
+			min-height: 100vh;
+		}
+
+		aside {
+			background: #020617;
+			padding: 2rem;
+		}
+
+		main {
+			padding: 2rem;
+		}
+	</style>
+</head>
+
+<body>
+	<aside>
+		<strong>Admin</strong>
+	</aside>
+	<main>
+		{{ .Yield }}
+	</main>
+</body>
+
+</html>

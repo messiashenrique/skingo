@@ -257,6 +257,38 @@ func main() {
 }
 ```
 
+### Renderizando com um Layout Diferente
+
+O Skingo pode analisar múltiplos layouts a partir do mesmo filesystem. O layout
+informado em `NewTemplateSet` continua sendo o layout padrão usado por `Execute`.
+
+Arquivos de layout adicionais são detectados quando possuem `{{ .Yield }}` e não
+usam um bloco `<template>`.
+
+```go
+//go:embed templates/*
+var templateFS embed.FS
+
+func main() {
+    ts := skingo.NewTemplateSet("layout")
+    if err := ts.ParseFS(templateFS, "templates"); err != nil {
+        log.Fatal(err)
+    }
+
+    // Usa templates/layout.html
+    http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+        ts.Execute(w, "home", data)
+    })
+
+    // Usa templates/admin.html com o mesmo template "home"
+    http.HandleFunc("/admin", func(w http.ResponseWriter, r *http.Request) {
+        ts.ExecuteWithLayout(w, "admin", "home", data)
+    })
+}
+```
+
+Veja `examples/layouts` para um exemplo completo com filesystem embutido.
+
 ## API
 
 ### NewTemplateSet
@@ -271,17 +303,63 @@ func (ts *TemplateSet) ParseDirs(dirs ...string) error
 ```
 Analisa todos os arquivos HTML/templates nos diretórios especificados.
 
+Os nomes dos templates são baseados no nome do arquivo sem extensão. O parse falha
+se dois arquivos resultarem no mesmo nome de template.
+
+Arquivos sem bloco `<template>` que possuem `{{ .Yield }}` são analisados como layouts.
+
 ### ParseFS
 ```go
 func (ts *TemplateSet) ParseFS(filesystem fs.FS, roots ...string) error
 ```
 Analisa todos os arquivos HTML/template em um sistema de arquivos embutido (embedded filesystem).
 
+Os nomes dos templates são baseados no nome do arquivo sem extensão. O parse falha
+se dois arquivos resultarem no mesmo nome de template.
+
+Arquivos sem bloco `<template>` que possuem `{{ .Yield }}` são analisados como layouts.
+
+### MustParseDirs
+```go
+func (ts *TemplateSet) MustParseDirs(dirs ...string)
+```
+Invoca `ParseDirs` e gera panic se o parse falhar.
+
+### MustParseFS
+```go
+func (ts *TemplateSet) MustParseFS(filesystem fs.FS, roots ...string)
+```
+Invoca `ParseFS` e gera panic se o parse falhar.
+
 ### Execute
 ```go
 func (ts *TemplateSet) Execute(w io.Writer, name string, data interface{}) error
 ```
 Renderiza o template especificado usando o layout configurado.
+
+### ExecuteWithLayout
+```go
+func (ts *TemplateSet) ExecuteWithLayout(w io.Writer, layoutName string, name string, data interface{}) error
+```
+Renderiza o template especificado usando um layout analisado pelo nome.
+
+### ExecuteString
+```go
+func (ts *TemplateSet) ExecuteString(name string, data interface{}) (string, error)
+```
+Renderiza o template especificado usando o layout configurado e retorna o HTML como string.
+
+### ExecuteStringWithLayout
+```go
+func (ts *TemplateSet) ExecuteStringWithLayout(layoutName string, name string, data interface{}) (string, error)
+```
+Renderiza o template especificado usando um layout analisado pelo nome e retorna o HTML como string.
+
+### Render
+```go
+func (ts *TemplateSet) Render(name string, data interface{}) (string, error)
+```
+Alias para `ExecuteString`.
 
 ### ExecuteIsolated
 ```go
@@ -303,6 +381,12 @@ Este método é semelhante ao ExecuteIsolated, mas funciona com sistemas de arqu
 é necessário.
 
 O parâmetro 'fsPath' deve ser o caminho dentro do sistema de arquivos.
+
+### ClearIsolatedCache
+```go
+func (ts *TemplateSet) ClearIsolatedCache()
+```
+Limpa os templates em cache usados por `ExecuteIsolated` e `ExecuteIsolatedFS`.
 
 ## Funções de Template
 
@@ -343,7 +427,7 @@ ts.AddFuncs(template.FuncMap{
     },
 })
 ```
-* **Nota**: Este método deve ser chamado antes de `ParseDirs`.
+* **Nota**: Este método deve ser chamado antes de `ParseDirs` ou `ParseFS`.
 
 ## Roteiro de Desenvolvimento
 
@@ -369,8 +453,6 @@ ts.AddFuncs(template.FuncMap{
 
 ## Licença
 MIT
-
-
 
 
 

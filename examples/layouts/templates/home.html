@@ -1,0 +1,26 @@
+<template>
+	<section class="home">
+		<h1>{{ .Title }}</h1>
+		<p>{{ .Message }}</p>
+		<nav>
+			<a href="/">Default layout</a>
+			<a href="/admin">Admin layout</a>
+		</nav>
+	</section>
+</template>
+
+<style>
+	.home {
+		display: grid;
+		gap: 1rem;
+	}
+
+	.home h1 {
+		margin: 0;
+	}
+
+	.home nav {
+		display: flex;
+		gap: 0.75rem;
+	}
+</style>

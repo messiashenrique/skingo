@@ -256,6 +256,38 @@ func main() {
 }
 ```
 
+### Rendering with a Different Layout
+
+Skingo can parse multiple layouts from the same filesystem. The layout passed to
+`NewTemplateSet` is still the default layout used by `Execute`.
+
+Additional layout files are detected when they contain `{{ .Yield }}` and do not
+use a `<template>` block.
+
+```go
+//go:embed templates/*
+var templateFS embed.FS
+
+func main() {
+    ts := skingo.NewTemplateSet("layout")
+    if err := ts.ParseFS(templateFS, "templates"); err != nil {
+        log.Fatal(err)
+    }
+
+    // Uses templates/layout.html
+    http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+        ts.Execute(w, "home", data)
+    })
+
+    // Uses templates/admin.html with the same "home" template
+    http.HandleFunc("/admin", func(w http.ResponseWriter, r *http.Request) {
+        ts.ExecuteWithLayout(w, "admin", "home", data)
+    })
+}
+```
+
+See `examples/layouts` for a complete embedded filesystem example.
+
 ## API
 
 ### NewTemplateSet
@@ -270,6 +302,11 @@ func (ts *TemplateSet) ParseDirs(dirs ...string) error
 ```
 Parses all HTML/templates files in the specified directories.
 
+Template names are based on the file basename without extension. Parsing fails if
+two files resolve to the same template name.
+
+Files without a `<template>` block that contain `{{ .Yield }}` are parsed as layouts.
+
 ### ParseFS
 
 ```go
@@ -277,11 +314,52 @@ func (ts *TemplateSet) ParseFS(filesystem fs.FS, roots ...string) error
 ```
 Parses all HTML/template files in an embedded filesystem.
 
+Template names are based on the file basename without extension. Parsing fails if
+two files resolve to the same template name.
+
+Files without a `<template>` block that contain `{{ .Yield }}` are parsed as layouts.
+
+### MustParseDirs
+```go
+func (ts *TemplateSet) MustParseDirs(dirs ...string)
+```
+Invokes `ParseDirs` and panics if parsing fails.
+
+### MustParseFS
+```go
+func (ts *TemplateSet) MustParseFS(filesystem fs.FS, roots ...string)
+```
+Invokes `ParseFS` and panics if parsing fails.
+
 ### Execute
 ```go
 func (ts *TemplateSet) Execute(w io.Writer, name string, data interface{}) error
 ```
 Renders the specified template using the configured layout.
+
+### ExecuteWithLayout
+```go
+func (ts *TemplateSet) ExecuteWithLayout(w io.Writer, layoutName string, name string, data interface{}) error
+```
+Renders the specified template using a parsed layout by name.
+
+### ExecuteString
+```go
+func (ts *TemplateSet) ExecuteString(name string, data interface{}) (string, error)
+```
+Renders the specified template using the configured layout and returns the HTML string.
+
+### ExecuteStringWithLayout
+```go
+func (ts *TemplateSet) ExecuteStringWithLayout(layoutName string, name string, data interface{}) (string, error)
+```
+Renders the specified template using a parsed layout by name and returns the HTML string.
+
+### Render
+```go
+func (ts *TemplateSet) Render(name string, data interface{}) (string, error)
+```
+Alias for `ExecuteString`.
 
 ### ExecuteIsolated
 ```go
@@ -304,6 +382,12 @@ It is ideal for use with 'HTMX', Ajax requests, or any scenario where only a sin
 is required.
 
 The 'fsPath' parameter should be the path within the filesystem.
+
+### ClearIsolatedCache
+```go
+func (ts *TemplateSet) ClearIsolatedCache()
+```
+Clears cached templates used by `ExecuteIsolated` and `ExecuteIsolatedFS`.
 
 ## Template Functions
 
@@ -344,7 +428,7 @@ ts.AddFuncs(template.FuncMap{
     },
 })
 ```
-* **Note**: This method should be called before `ParseDirs`.
+* **Note**: This method should be called before `ParseDirs` or `ParseFS`.
 
 ## Roadmap for Development
 
@@ -370,8 +454,6 @@ ts.AddFuncs(template.FuncMap{
 
 ## License
 MIT
-
-
 
 
 
