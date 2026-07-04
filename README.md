@@ -4,7 +4,7 @@
   </picture>
 </h1>
 
-🌏 English | 🇧🇷 **[Português](README-pt-BR.md)**
+🇧🇷 **[Leia em Português](README-pt-BR.md)**
 
 # skingo
 Simple Proposal for Using HTML Templates in Go

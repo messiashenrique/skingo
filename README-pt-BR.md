@@ -5,7 +5,7 @@
   </picture>
 </h1>
 
-🌏 **[English](README.md)** | 🇧🇷 Português
+🌏 **[Read in English](README.md)**
 
 # skingo
 Simples proposta para usar modelos HTML em Go
