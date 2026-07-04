@@ -53,6 +53,7 @@ type TemplateSet struct {
 const (
 	uniqueOpenToken      = "___GO_TEMPLATE_OPEN___"
 	uniqueCloseToken     = "___GO_TEMPLATE_CLOSE___"
+	layoutsDirName       = "layouts"
 	ElementTypeNormal    = 0 // Normal element
 	ElementTypeSingle    = 1 // Single element
 	ElementTypeContainer = 2 // Root Container
@@ -160,9 +161,8 @@ func extractComponentNames(content string) []string {
 	return names
 }
 
-func isLayoutContent(content []byte) bool {
-	contentStr := string(content)
-	return !htmlRegex.Match(content) && strings.Contains(contentStr, ".Yield")
+func isLayoutPath(path string) bool {
+	return filepath.Base(filepath.Dir(path)) == layoutsDirName
 }
 
 // generateScopeClass build a scope class based on the template name and returns
@@ -312,6 +312,10 @@ func (ts *TemplateSet) parseLayoutFile(name string, content string) error {
 		HTML: content,
 	}
 
+	if !strings.Contains(layout.HTML, ".Yield") {
+		return fmt.Errorf("layout template must contain {{ .Yield }}")
+	}
+
 	// Insert the style tag for the template before the </head>
 	headCloseIndex := strings.Index(layout.HTML, "</head>")
 	if headCloseIndex == -1 {
@@ -342,13 +346,13 @@ func (ts *TemplateSet) parseLayoutFile(name string, content string) error {
 }
 
 // processTemplate processes a single template and extracts HTML, CSS, and JS
-func (ts *TemplateSet) processTemplate(name string, content []byte, source string) error {
+func (ts *TemplateSet) processTemplate(name string, content []byte, source string, isLayout bool) error {
 	if err := ts.registerSource(name, source); err != nil {
 		return err
 	}
 
 	// Process layout in a special way
-	if name == ts.layoutName || isLayoutContent(content) {
+	if isLayout {
 		return ts.parseLayoutFile(name, string(content))
 	}
 
@@ -662,7 +666,7 @@ func (ts *TemplateSet) finalizeParsing() error {
 }
 
 // parseFile analyze a file and extract HTML, CSS and JS
-func (ts *TemplateSet) parseFile(filename string) error {
+func (ts *TemplateSet) parseFile(filename string, isLayout bool) error {
 	content, err := os.ReadFile(filename)
 	if err != nil {
 		return err
@@ -671,7 +675,7 @@ func (ts *TemplateSet) parseFile(filename string) error {
 	name := filepath.Base(filename)
 	name = strings.TrimSuffix(name, filepath.Ext(name))
 
-	return ts.processTemplate(name, content, filename)
+	return ts.processTemplate(name, content, filename, isLayout)
 }
 
 // ParseDirs parses all HTML/template files in the given directories.
@@ -683,44 +687,55 @@ func (ts *TemplateSet) parseFile(filename string) error {
 // scoped using unique classes to avoid conflicts.
 // The content inside the <script> tag is extracted as JavaScript.
 //
-// The method requires that a layout template (defined when creating the
-// TemplateSet) be found in at least one of the given directories.
+// The method walks directories recursively and requires that a layout template
+// (defined when creating the TemplateSet) be found inside a layouts directory.
 //
 // After processing, the templates are available for rendering via
 // the Execute method, with their CSS styles and JS scripts automatically
 // included in the appropriate places in the layout.
 //
 // Returns an error if any directory cannot be read, if any template
-// cannot be parsed, or if the layout template is not found.
+// cannot be parsed, or if the layout template is not found in a layouts directory.
 func (ts *TemplateSet) ParseDirs(dirs ...string) error {
 	layoutFound := false
 
 	for _, dir := range dirs {
-		files, err := os.ReadDir(dir)
-		if err != nil {
-			return fmt.Errorf("error reading directory %s: %w", dir, err)
-		}
+		err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				return nil
+			}
 
-		// First pass: read all files and extract HTML, CSS and JS
-		for _, file := range files {
-			if file.IsDir() {
-				continue
+			ext := filepath.Ext(d.Name())
+			if ext != ".html" && ext != ".tmpl" {
+				return nil
 			}
-			if filepath.Ext(file.Name()) == ".html" || filepath.Ext(file.Name()) == ".tmpl" {
-				name := strings.TrimSuffix(file.Name(), filepath.Ext(file.Name()))
-				if name == ts.layoutName {
-					layoutFound = true
-				}
-				path := filepath.Join(dir, file.Name())
-				if err := ts.parseFile(path); err != nil {
-					return fmt.Errorf("error parsing file %s: %w", path, err)
-				}
+
+			name := strings.TrimSuffix(d.Name(), ext)
+			isLayout := isLayoutPath(path)
+			if isLayout && name == ts.layoutName {
+				layoutFound = true
 			}
+
+			if err := ts.parseFile(path, isLayout); err != nil {
+				return fmt.Errorf("error parsing file %s: %w", path, err)
+			}
+
+			return nil
+		})
+
+		if err != nil {
+			if os.IsNotExist(err) {
+				return fmt.Errorf("error reading directory %s: %w", dir, err)
+			}
+			return fmt.Errorf("error processing directory %s: %w", dir, err)
 		}
 	}
 
 	if !layoutFound {
-		return fmt.Errorf("layout template '%s' not found in any of the provided directories", ts.layoutName)
+		return fmt.Errorf("layout template '%s' not found in any layouts directory in the provided directories", ts.layoutName)
 	}
 
 	return ts.finalizeParsing()
@@ -735,19 +750,18 @@ func (ts *TemplateSet) ParseDirs(dirs ...string) error {
 // components that contain <template>, <style>, and <script> tags.
 //
 // Similar to ParseDirs, this method requires that a layout template
-// (defined when creating the TemplateSet) be found in at least one of the
-// specified directories.
+// (defined when creating the TemplateSet) be found inside a layouts directory.
 //
 // Example usage with embed:
 //
-//	//go:embed templates/**/*.html
+//	//go:embed templates
 //	var templateFS embed.FS
 //
 //	ts := skingo.NewTemplateSet("layout")
-//	err := ts.ParseFS(templateFS, "templates/pages", "templates/components")
+//	err := ts.ParseFS(templateFS, "templates")
 //
 // Returns an error if any template cannot be parsed
-// or if the layout template is not found.
+// or if the layout template is not found in a layouts directory.
 func (ts *TemplateSet) ParseFS(filesystem fs.FS, roots ...string) error {
 	layoutFound := false
 
@@ -771,7 +785,8 @@ func (ts *TemplateSet) ParseFS(filesystem fs.FS, roots ...string) error {
 
 			// Extract the template name
 			name := strings.TrimSuffix(d.Name(), ext)
-			if name == ts.layoutName {
+			isLayout := isLayoutPath(path)
+			if isLayout && name == ts.layoutName {
 				layoutFound = true
 			}
 
@@ -782,7 +797,7 @@ func (ts *TemplateSet) ParseFS(filesystem fs.FS, roots ...string) error {
 			}
 
 			// Process the template
-			return ts.processTemplate(name, content, path)
+			return ts.processTemplate(name, content, path, isLayout)
 		})
 
 		if err != nil {
@@ -791,7 +806,7 @@ func (ts *TemplateSet) ParseFS(filesystem fs.FS, roots ...string) error {
 	}
 
 	if !layoutFound {
-		return fmt.Errorf("layout template '%s' not found in any of the provided filesystem paths", ts.layoutName)
+		return fmt.Errorf("layout template '%s' not found in any layouts directory in the provided filesystem paths", ts.layoutName)
 	}
 
 	return ts.finalizeParsing()

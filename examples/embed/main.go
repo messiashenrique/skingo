@@ -8,17 +8,17 @@ import (
 	"github.com/messiashenrique/skingo"
 )
 
-//go:embed templates/* components/*
+//go:embed templates
 var templateFS embed.FS
 
 func main() {
 	// Makes a new TemplateSet with layout template
 	ts := skingo.NewTemplateSet("layout")
 
-	// Analyze the templates in the "templates" and "components" directories
+	// Analyze the templates in the "templates" directory
 	// Use ParseFS instead of ParseDir
-	// if err := ts.ParseDirs("templates", "components"); err != nil {
-	if err := ts.ParseFS(templateFS, "templates", "components"); err != nil {
+	// if err := ts.ParseDirs("templates"); err != nil {
+	if err := ts.ParseFS(templateFS, "templates"); err != nil {
 		log.Fatalf("Error parsing templates: %v", err)
 	}
 

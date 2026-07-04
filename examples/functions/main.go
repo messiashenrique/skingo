@@ -5,6 +5,8 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/messiashenrique/skingo"
@@ -23,7 +25,7 @@ func main() {
 	})
 
 	// Analyze the templates in the "templates" directory
-	if err := ts.ParseDirs("templates"); err != nil {
+	if err := ts.ParseDirs(templatesDir("functions")); err != nil {
 		log.Fatalf("Error parsing templates: %v", err)
 	}
 
@@ -42,4 +44,12 @@ func main() {
 
 	log.Println("Server running on http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
+}
+
+func templatesDir(example string) string {
+	local := "templates"
+	if _, err := os.Stat(local); err == nil {
+		return local
+	}
+	return filepath.Join("examples", example, "templates")
 }

@@ -67,7 +67,23 @@ func main() {
 
 ## Layout 
 
-O Skingo permite a utilização flexível de layout. Assim, o único ponto obrigatório é definir a variável `{{ .Yield }}` como ponto de entrada para a renderização dos templates que utilizarem esse layout.
+O Skingo usa convenção acima de configuração para layouts. Arquivos de layout
+devem ficar dentro de um diretório chamado `layouts`, e cada layout deve definir
+`{{ .Yield }}` como ponto de entrada para a renderização dos templates que usarem
+esse layout.
+
+Estrutura recomendada:
+
+```text
+templates/
+  layouts/
+    layout.html
+    admin.html
+  pages/
+    home.html
+  components/
+    button.html
+```
 
 Os código CSS e JavaScript declarados no layout terão escopo global.
 
@@ -75,7 +91,7 @@ Um exemplo de layout pode ser visto a seguir:
 
 ### Definindo um Layout 
 ```html
-<!-- templates/layout.html -->
+<!-- templates/layouts/layout.html -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -89,7 +105,8 @@ Um exemplo de layout pode ser visto a seguir:
 ```
 Para definir o arquivo acima como layout, basta inserir o nome do arquivo na chamada de criação do conjunto de templates, fazendo `ts := skingo.NewTemplateSet("layout")`. 
 
-Não de esqueça de incluir na função `ParseDirs` o diretório onde está localizado o arquivo do layout.
+O arquivo de layout também deve conter as tags `</head>` e `</body>` para que o
+Skingo injete o CSS e o JavaScript com escopo.
 
 
 ## Componentes
@@ -223,7 +240,7 @@ import (
     "github.com/messiashenrique/skingo"
 )
 
-//go:embed templates/**/*.html
+//go:embed templates
 var templateFS embed.FS
 
 func main() {
@@ -231,7 +248,7 @@ func main() {
     ts := skingo.NewTemplateSet("layout")
     
     // Analisa os templates no filesystem embutido
-    if err := ts.ParseFS(templateFS, "templates/pages", "templates/components"); err != nil {
+    if err := ts.ParseFS(templateFS, "templates"); err != nil {
         log.Fatalf("Error parsing templates: %v", err)
     }
     
@@ -262,11 +279,10 @@ func main() {
 O Skingo pode analisar múltiplos layouts a partir do mesmo filesystem. O layout
 informado em `NewTemplateSet` continua sendo o layout padrão usado por `Execute`.
 
-Arquivos de layout adicionais são detectados quando possuem `{{ .Yield }}` e não
-usam um bloco `<template>`.
+Layouts adicionais devem ficar em um diretório `layouts`.
 
 ```go
-//go:embed templates/*
+//go:embed templates
 var templateFS embed.FS
 
 func main() {
@@ -275,12 +291,12 @@ func main() {
         log.Fatal(err)
     }
 
-    // Usa templates/layout.html
+    // Usa templates/layouts/layout.html
     http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
         ts.Execute(w, "home", data)
     })
 
-    // Usa templates/admin.html com o mesmo template "home"
+    // Usa templates/layouts/admin.html com o mesmo template "home"
     http.HandleFunc("/admin", func(w http.ResponseWriter, r *http.Request) {
         ts.ExecuteWithLayout(w, "admin", "home", data)
     })
@@ -306,7 +322,8 @@ Analisa todos os arquivos HTML/templates nos diretórios especificados.
 Os nomes dos templates são baseados no nome do arquivo sem extensão. O parse falha
 se dois arquivos resultarem no mesmo nome de template.
 
-Arquivos sem bloco `<template>` que possuem `{{ .Yield }}` são analisados como layouts.
+Layouts são analisados apenas em diretórios chamados `layouts`. `ParseDirs`
+caminha pelos diretórios recursivamente.
 
 ### ParseFS
 ```go
@@ -317,7 +334,7 @@ Analisa todos os arquivos HTML/template em um sistema de arquivos embutido (embe
 Os nomes dos templates são baseados no nome do arquivo sem extensão. O parse falha
 se dois arquivos resultarem no mesmo nome de template.
 
-Arquivos sem bloco `<template>` que possuem `{{ .Yield }}` são analisados como layouts.
+Layouts são analisados apenas em diretórios chamados `layouts`.
 
 ### MustParseDirs
 ```go
@@ -453,8 +470,6 @@ ts.AddFuncs(template.FuncMap{
 
 ## Licença
 MIT
-
-
 
 
 

@@ -72,7 +72,7 @@ func TestExecuteIsolatedFSExtractsTemplateContent(t *testing.T) {
 func TestParseDirsRejectsDuplicateTemplateNames(t *testing.T) {
 	dirA := t.TempDir()
 	dirB := t.TempDir()
-	writeTestFile(t, dirA, "layout.html", testLayout)
+	writeTestFile(t, dirA, "layouts/layout.html", testLayout)
 	writeTestFile(t, dirA, "card.html", `<template><div>A</div></template>`)
 	writeTestFile(t, dirB, "card.html", `<template><div>B</div></template>`)
 
@@ -88,14 +88,14 @@ func TestParseDirsRejectsDuplicateTemplateNames(t *testing.T) {
 
 func TestParseFSRejectsDuplicateTemplateNames(t *testing.T) {
 	testFS := newTestFS(map[string]string{
-		"pages/layout.html":     testLayout,
-		"pages/card.html":       `<template><div>A</div></template>`,
-		"components/card.html":  `<template><div>B</div></template>`,
-		"components/other.html": `<template><div>C</div></template>`,
+		"templates/layouts/layout.html":   testLayout,
+		"templates/pages/card.html":       `<template><div>A</div></template>`,
+		"templates/components/card.html":  `<template><div>B</div></template>`,
+		"templates/components/other.html": `<template><div>C</div></template>`,
 	})
 
 	ts := NewTemplateSet("layout")
-	err := ts.ParseFS(testFS, "pages", "components")
+	err := ts.ParseFS(testFS, "templates")
 	if err == nil {
 		t.Fatal("expected duplicate template name error")
 	}
@@ -106,7 +106,7 @@ func TestParseFSRejectsDuplicateTemplateNames(t *testing.T) {
 
 func TestNestedComponentsAndParams(t *testing.T) {
 	testFS := newTestFS(map[string]string{
-		"templates/layout.html": testLayout,
+		"templates/layouts/layout.html": testLayout,
 		"templates/page.html": `<template>
 {{ comp "card" (dict "label" "Save") }}
 </template>`,
@@ -133,9 +133,95 @@ func TestNestedComponentsAndParams(t *testing.T) {
 	}
 }
 
-func TestComponentCSSAndJSIncludedOnce(t *testing.T) {
+func TestParseFSOnlyTreatsLayoutsDirectoryAsLayouts(t *testing.T) {
+	testFS := newTestFS(map[string]string{
+		"templates/layouts/layout.html": testLayout,
+		"templates/legacy.html": `<!DOCTYPE html>
+<html>
+<head><title>legacy</title></head>
+<body>{{ .Yield }}</body>
+</html>`,
+		"templates/page.html": `<template><h1>{{ .Title }}</h1></template>`,
+	})
+
+	ts := NewTemplateSet("layout")
+	if err := ts.ParseFS(testFS, "templates"); err != nil {
+		t.Fatalf("ParseFS returned error: %v", err)
+	}
+
+	err := ts.ExecuteWithLayout(&strings.Builder{}, "legacy", "page", nil)
+	if err == nil {
+		t.Fatal("expected legacy layout outside layouts directory to be ignored")
+	}
+	if !strings.Contains(err.Error(), "layout template legacy not found") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestParseFSMissingLayoutsDirectoryLayout(t *testing.T) {
 	testFS := newTestFS(map[string]string{
 		"templates/layout.html": testLayout,
+		"templates/page.html":   `<template><h1>{{ .Title }}</h1></template>`,
+	})
+
+	ts := NewTemplateSet("layout")
+	err := ts.ParseFS(testFS, "templates")
+	if err == nil {
+		t.Fatal("expected missing layouts directory error")
+	}
+	if !strings.Contains(err.Error(), "not found in any layouts directory") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestParseFSRejectsLayoutWithoutYield(t *testing.T) {
+	testFS := newTestFS(map[string]string{
+		"templates/layouts/layout.html": `<!DOCTYPE html>
+<html>
+<head><title>test</title></head>
+<body><main></main></body>
+</html>`,
+		"templates/page.html": `<template><h1>{{ .Title }}</h1></template>`,
+	})
+
+	ts := NewTemplateSet("layout")
+	err := ts.ParseFS(testFS, "templates")
+	if err == nil {
+		t.Fatal("expected missing Yield error")
+	}
+	if !strings.Contains(err.Error(), "layout template must contain") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestParseDirsWalksRecursively(t *testing.T) {
+	root := t.TempDir()
+	templatesDir := filepath.Join(root, "templates")
+	writeTestFile(t, templatesDir, "layouts/layout.html", testLayout)
+	writeTestFile(t, templatesDir, "pages/home.html", `<template>
+<main>{{ comp "button" .Label }}</main>
+</template>`)
+	writeTestFile(t, templatesDir, "components/button.html", `<template>
+<button>{{ param 0 }}</button>
+</template>`)
+
+	ts := NewTemplateSet("layout")
+	if err := ts.ParseDirs(templatesDir); err != nil {
+		t.Fatalf("ParseDirs returned error: %v", err)
+	}
+
+	html, err := ts.ExecuteString("home", map[string]string{"Label": "Save"})
+	if err != nil {
+		t.Fatalf("ExecuteString returned error: %v", err)
+	}
+	if !strings.Contains(html, "<button>Save</button>") {
+		t.Fatalf("expected recursive ParseDirs output, got:\n%s", html)
+	}
+}
+
+func TestComponentCSSAndJSIncludedOnce(t *testing.T) {
+	testFS := newTestFS(map[string]string{
+		"templates/layouts/layout.html": testLayout,
 		"templates/page.html": `<template>
 {{ comp "button" "A" }}
 {{ comp "button" "B" }}
@@ -171,12 +257,12 @@ console.log("button");
 
 func TestExecuteWithLayoutUsesRequestedLayout(t *testing.T) {
 	testFS := newTestFS(map[string]string{
-		"templates/layout.html": `<!DOCTYPE html>
+		"templates/layouts/layout.html": `<!DOCTYPE html>
 <html>
 <head><title>default</title></head>
 <body><main class="default">{{ .Yield }}</main></body>
 </html>`,
-		"templates/admin.html": `<!DOCTYPE html>
+		"templates/layouts/admin.html": `<!DOCTYPE html>
 <html>
 <head><title>admin</title></head>
 <body><aside>Admin</aside><main class="admin">{{ .Yield }}</main></body>
@@ -208,8 +294,8 @@ func TestExecuteWithLayoutUsesRequestedLayout(t *testing.T) {
 
 func TestExecuteWithLayoutReturnsErrorForUnknownLayout(t *testing.T) {
 	testFS := newTestFS(map[string]string{
-		"templates/layout.html": testLayout,
-		"templates/page.html":   `<template><h1>{{ .Title }}</h1></template>`,
+		"templates/layouts/layout.html": testLayout,
+		"templates/page.html":           `<template><h1>{{ .Title }}</h1></template>`,
 	})
 
 	ts := NewTemplateSet("layout")
@@ -228,7 +314,7 @@ func TestExecuteWithLayoutReturnsErrorForUnknownLayout(t *testing.T) {
 
 func TestExecuteConcurrent(t *testing.T) {
 	testFS := newTestFS(map[string]string{
-		"templates/layout.html": testLayout,
+		"templates/layouts/layout.html": testLayout,
 		"templates/page.html": `<template>
 {{ comp "button" .Label .Color }}
 </template>`,
@@ -276,8 +362,8 @@ func TestExecuteConcurrent(t *testing.T) {
 
 func BenchmarkExecuteSimple(b *testing.B) {
 	testFS := newTestFS(map[string]string{
-		"templates/layout.html": testLayout,
-		"templates/page.html":   `<template><main><h1>{{ .Title }}</h1></main></template>`,
+		"templates/layouts/layout.html": testLayout,
+		"templates/page.html":           `<template><main><h1>{{ .Title }}</h1></main></template>`,
 	})
 
 	ts := NewTemplateSet("layout")
@@ -295,10 +381,10 @@ func BenchmarkExecuteSimple(b *testing.B) {
 
 func BenchmarkExecuteNestedComponents(b *testing.B) {
 	testFS := newTestFS(map[string]string{
-		"templates/layout.html": testLayout,
-		"templates/page.html":   `<template>{{ comp "card" (dict "label" "Save") }}</template>`,
-		"templates/card.html":   `<template><section>{{ comp "button" .label "green" }}</section></template>`,
-		"templates/button.html": `<template><button class="{{ paramOr 1 "blue" }}">{{ param 0 }}</button></template>`,
+		"templates/layouts/layout.html": testLayout,
+		"templates/page.html":           `<template>{{ comp "card" (dict "label" "Save") }}</template>`,
+		"templates/card.html":           `<template><section>{{ comp "button" .label "green" }}</section></template>`,
+		"templates/button.html":         `<template><button class="{{ paramOr 1 "blue" }}">{{ param 0 }}</button></template>`,
 	})
 
 	ts := NewTemplateSet("layout")
@@ -355,7 +441,7 @@ func BenchmarkExecuteIsolatedCacheMiss(b *testing.B) {
 
 func BenchmarkParseFSManyTemplates(b *testing.B) {
 	files := map[string]string{
-		"templates/layout.html": testLayout,
+		"templates/layouts/layout.html": testLayout,
 	}
 	for i := 0; i < 100; i++ {
 		files[fmt.Sprintf("templates/page-%03d.html", i)] = fmt.Sprintf(`<template><p>Page %d</p></template>`, i)

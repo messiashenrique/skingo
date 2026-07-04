@@ -8,7 +8,7 @@ import (
 	"github.com/messiashenrique/skingo"
 )
 
-//go:embed templates/*
+//go:embed templates
 var templateFS embed.FS
 
 func main() {

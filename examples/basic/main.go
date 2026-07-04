@@ -3,6 +3,8 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/messiashenrique/skingo"
 )
@@ -12,7 +14,7 @@ func main() {
 	ts := skingo.NewTemplateSet("layout")
 
 	// Analyze the templates in the "templates" directory
-	if err := ts.ParseDirs("templates"); err != nil {
+	if err := ts.ParseDirs(templatesDir("basic")); err != nil {
 		log.Fatalf("Error parsing templates: %v", err)
 	}
 
@@ -32,4 +34,12 @@ func main() {
 
 	log.Println("Server running in http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
+}
+
+func templatesDir(example string) string {
+	local := "templates"
+	if _, err := os.Stat(local); err == nil {
+		return local
+	}
+	return filepath.Join("examples", example, "templates")
 }
